@@ -55,3 +55,5 @@
 [2025-11-22 15:28:25] User: 13, IP: ::1, Action: user_login, Details: User logged in: baron
 [2025-11-22 19:55:51] User: 8, IP: ::1, Action: user_login, Details: User logged in: me
 [2025-11-22 20:32:32] User: 14, IP: ::1, Action: user_login, Details: User logged in: memyself
+[2025-11-23 14:39:30] User: 8, IP: ::1, Action: user_login, Details: User logged in: me
+[2025-11-23 19:16:40] User: 15, IP: ::1, Action: user_login, Details: User logged in: testing

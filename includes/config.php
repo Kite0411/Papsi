@@ -4,9 +4,9 @@
 
 // Database Configuration
 define('DB_HOST', 'localhost');
-define('DB_USERNAME', 'root');
-define('DB_PASSWORD', '');
-define('DB_NAME', 'autorepair_db');
+define('DB_USERNAME', 'u563434200_papsi');
+define('DB_PASSWORD', 'u563434200_@A');
+define('DB_NAME', 'u563434200_papsi');
 
 // AI Configuration
 define('HUGGING_FACE_TOKEN', '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');
