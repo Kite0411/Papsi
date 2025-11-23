@@ -1,0 +1,11 @@
+[2025-10-06 10:43:27] User: guest, IP: ::1, Action: chatbot_conversation, Details: User Problem: hello | Bot Recommendation: hi
+[2025-10-06 10:43:34] User: guest, IP: ::1, Action: chatbot_error, Details: API Error: , HTTP Code: 404
+[2025-10-06 10:43:34] User: guest, IP: ::1, Action: chatbot_conversation, Details: User Problem: im john lloyd | Bot Recommendation: I understand you're having vehicle issues. To provide the best recommendation, I'd need to know more about your specific problem. You can describe the symptoms, or I can recommend our **General Diagnostics** to identify the issue. What specific problem are you experiencing?
+[2025-10-06 11:37:12] User: guest, IP: ::1, Action: chatbot_error, Details: API Error: , HTTP Code: 404
+[2025-10-06 11:37:12] User: guest, IP: ::1, Action: chatbot_conversation, Details: User Problem: My engine is making a strange noise | Bot Recommendation: Based on your description, I recommend:
+
+• **Engine Diagnostics** - to identify the source of the noise
+• **Transmission Diagnostics** - to identify transmission issues
+• **Suspension Inspection** - to check for worn components
+
+Would you like to schedule an appointment for any of these services?

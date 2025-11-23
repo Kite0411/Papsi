@@ -1,0 +1,11 @@
+pip install flask
+
+pip install flask-cors
+
+pip install pandas
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+pip install sentence-transformers
+
+pip install mysql-connector-python
