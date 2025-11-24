@@ -15,11 +15,11 @@ services:
       - key: DB_HOST
         value: auth-db1983.hstgr.io
       - key: DB_USER
-        value: u563434200_papsi
+        value: u563434200_papsipaps
       - key: DB_PASSWORD
         value: u563434200_@A
       - key: DB_NAME
-        value: u563434200_papsi
+        value: u563434200_papsipaps
       - key: DB_PORT
         value: 3306
     healthCheckPath: /health
