@@ -1,3 +1,4 @@
+
 # Core Flask dependencies
 Flask==3.0.0
 flask-cors==4.0.0
@@ -20,3 +21,5 @@ mysql-connector-python==8.2.0
 
 # HTTP
 requests==2.31.0
+
+python-dotenv==1.0.1
