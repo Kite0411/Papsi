@@ -120,7 +120,7 @@ def get_services_from_db():
 # ==================== SEMANTIC SEARCH FUNCTIONS ====================
 
 def semantic_search_faq(user_message, faq_data):
-    """Search FAQ using semantic similarity"""
+    """Search FAQ using semantic similarity with keyword boost"""
     if not model_loaded or model is None or len(faq_data) == 0:
         return None, 0
     
@@ -138,18 +138,39 @@ def semantic_search_faq(user_message, faq_data):
         questions = faq_data['question'].tolist()
         answers = faq_data['answer'].tolist()
         
+        # Get semantic similarities
         faq_embeddings = model.encode(questions, convert_to_tensor=True)
         user_emb = model.encode(user_message, convert_to_tensor=True)
-        similarities = util.cos_sim(user_emb, faq_embeddings)
+        similarities = util.cos_sim(user_emb, faq_embeddings)[0]
         
-        index = int(similarities.argmax())
-        similarity_score = float(similarities[0][index])
+        # Boost scores based on keyword matching
+        user_keywords = set(user_message.lower().split())
+        boosted_scores = []
         
-        # Lower threshold for better matching
-        if similarity_score >= 0.35:
-            return answers[index], similarity_score
+        for i, question in enumerate(questions):
+            score = float(similarities[i])
+            question_keywords = set(question.lower().split())
+            
+            # Count matching keywords
+            matches = len(user_keywords & question_keywords)
+            
+            # Boost score if keywords match
+            if matches > 0:
+                boost = min(matches * 0.1, 0.3)  # Max boost of 0.3
+                score += boost
+            
+            boosted_scores.append((i, score))
         
-        return None, similarity_score
+        # Get best match
+        best_idx, best_score = max(boosted_scores, key=lambda x: x[1])
+        
+        print(f"🔍 FAQ Match: '{questions[best_idx][:50]}...' Score: {best_score:.3f}")
+        
+        # Lower threshold with keyword boost
+        if best_score >= 0.25:
+            return answers[best_idx], best_score
+        
+        return None, best_score
     except Exception as e:
         print(f"⚠️ Error in FAQ search: {e}")
         return None, 0
@@ -187,11 +208,24 @@ def keyword_search_services(user_message, services):
     keywords = user_message.lower().split()
     matches = []
     
+    # Common synonyms for better matching
+    synonyms = {
+        'ac': ['aircon', 'air conditioning', 'cooling'],
+        'broke': ['broken', 'not working', 'failed'],
+        'fix': ['repair', 'service'],
+    }
+    
+    # Expand keywords with synonyms
+    expanded_keywords = set(keywords)
+    for kw in keywords:
+        if kw in synonyms:
+            expanded_keywords.update(synonyms[kw])
+    
     for service in services:
         name = service['service_name'].lower()
         desc = service['description'].lower()
         
-        score = sum(1 for kw in keywords if kw in name or kw in desc)
+        score = sum(1 for kw in expanded_keywords if kw in name or kw in desc)
         if score > 0:
             matches.append((service, score))
     
