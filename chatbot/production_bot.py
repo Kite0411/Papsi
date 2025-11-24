@@ -86,7 +86,7 @@ def get_services_from_db():
             return []
 
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT service_name, description, duration, price FROM services")
+        cursor.execute("SELECT service_name, description, duration, price FROM services WHERE is_archived = 0")
         services = cursor.fetchall()
         cursor.close()
         conn.close()
