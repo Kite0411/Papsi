@@ -306,7 +306,146 @@ document.addEventListener('DOMContentLoaded', function() {
             welcomeShown = false;
         }
     }, 600);
+
+    // Start polling for answers to pending questions
+    startPollingForAnswers();
 });
+
+// ==================== POLLING FOR ADMIN ANSWERS ====================
+let pollingInterval = null;
+let pendingQuestions = [];
+
+// Load pending questions from localStorage
+function loadPendingQuestions() {
+    const stored = localStorage.getItem('chatbot_pending_questions');
+    if (stored) {
+        try {
+            pendingQuestions = JSON.parse(stored);
+        } catch (e) {
+            pendingQuestions = [];
+        }
+    }
+}
+
+// Save pending questions to localStorage
+function savePendingQuestions() {
+    localStorage.setItem('chatbot_pending_questions', JSON.stringify(pendingQuestions));
+}
+
+// Add question to pending list
+function addPendingQuestion(question) {
+    loadPendingQuestions();
+
+    // Don't add duplicates
+    if (!pendingQuestions.find(q => q.question === question)) {
+        pendingQuestions.push({
+            question: question,
+            timestamp: Date.now()
+        });
+        savePendingQuestions();
+    }
+}
+
+// Remove question from pending list
+function removePendingQuestion(question) {
+    loadPendingQuestions();
+    pendingQuestions = pendingQuestions.filter(q => q.question !== question);
+    savePendingQuestions();
+}
+
+// Check if a question now has an answer
+async function checkQuestionAnswered(question) {
+    try {
+        const resp = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: question })
+        });
+
+        if (!resp.ok) return null;
+
+        const data = await resp.json();
+
+        // Check if response contains "I'm not sure" or "forwarded" (unanswered)
+        const isStillPending =
+            data.reply && (
+                data.reply.includes("I'm not sure") ||
+                data.reply.includes("forwarded your question") ||
+                data.reply.includes("I'll ask our")
+            );
+
+        if (!isStillPending && data.reply) {
+            return data.reply; // Got an answer!
+        }
+
+        return null; // Still pending
+    } catch (err) {
+        console.error('Error checking question:', err);
+        return null;
+    }
+}
+
+// Poll for answers every 30 seconds
+async function pollForAnswers() {
+    loadPendingQuestions();
+
+    if (pendingQuestions.length === 0) {
+        return; // Nothing to check
+    }
+
+    // Check each pending question
+    for (const item of pendingQuestions) {
+        const answer = await checkQuestionAnswered(item.question);
+
+        if (answer) {
+            // Got an answer! Show notification
+            addMessage(`✅ <strong>Update on your question:</strong> "${item.question}"`, false);
+            addMessage(answer, false);
+
+            // Remove from pending
+            removePendingQuestion(item.question);
+        }
+    }
+
+    // Clean up old pending questions (older than 24 hours)
+    const now = Date.now();
+    const dayAgo = 24 * 60 * 60 * 1000;
+    pendingQuestions = pendingQuestions.filter(q => (now - q.timestamp) < dayAgo);
+    savePendingQuestions();
+}
+
+// Start polling interval
+function startPollingForAnswers() {
+    // Poll every 30 seconds
+    pollingInterval = setInterval(pollForAnswers, 30000);
+
+    // Also poll once immediately after 5 seconds
+    setTimeout(pollForAnswers, 5000);
+}
+
+// Track when customer asks a question that gets "pending" response
+const originalAddMessage = addMessage;
+addMessage = function(content, isUser = false) {
+    // Call original function
+    originalAddMessage(content, isUser);
+
+    // If bot response contains "forwarded" or "not sure", track as pending
+    if (!isUser && content && (
+        content.includes("I'm not sure") ||
+        content.includes("forwarded your question") ||
+        content.includes("I'll ask our")
+    )) {
+        // Get the last user message from chat history
+        const messages = document.getElementById('chatbotMessages');
+        const userMessages = messages.querySelectorAll('.message-user .message-content');
+        if (userMessages.length > 0) {
+            const lastUserMessage = userMessages[userMessages.length - 1].textContent;
+            addPendingQuestion(lastUserMessage);
+        }
+    }
+};
+
 
 // Real-time updates (SSE) disabled for Render deployment
 // Render free tier doesn't maintain persistent connections well
