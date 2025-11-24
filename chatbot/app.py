@@ -1,10 +1,20 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import csv, os, json
 
 app = Flask(__name__)
 
-KNOWLEDGE_FILE = "knowledge.csv"
-PENDING_FILE = "pending.json"
+# Configure CORS for Hostinger frontend
+CORS(app, resources={
+    r"/*": {
+        "origins": os.environ.get("CORS_ORIGINS", "https://blueviolet-seahorse-808517.hostingersite.com").split(","),
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
+
+KNOWLEDGE_FILE = os.path.join(os.path.dirname(__file__), "knowledge.csv")
+PENDING_FILE = os.path.join(os.path.dirname(__file__), "pending.json")
 
 # --- Helper: load & save knowledge base ---
 def load_knowledge():
@@ -74,6 +84,26 @@ def save_answer():
 
     return jsonify({"status": "success", "message": "Answer saved to knowledge base!"})
 
+# --- Health check endpoint for Render ---
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "healthy", "service": "papsi-chatbot-api"}), 200
+
+# --- Root endpoint ---
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({
+        "service": "Papsi Chatbot API",
+        "version": "1.0.0",
+        "endpoints": {
+            "chat": "/chat (POST)",
+            "pending": "/pending (GET)",
+            "save_answer": "/save_answer (POST)",
+            "health": "/health (GET)"
+        }
+    })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_ENV", "development") == "development"
+    app.run(host="0.0.0.0", port=port, debug=debug)

@@ -1,0 +1,51 @@
+# Environment variables
+.env
+
+# Logs
+logs/
+*.log
+
+# PHP
+vendor/
+composer.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.sql
+!autorepair_db.sql
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# Sensitive data
+chatbot/pending.json
+chatbot/logs/
+pending.json
+pending_questions.csv
+responses.json

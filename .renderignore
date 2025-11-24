@@ -1,0 +1,38 @@
+# Render Ignore - Don't deploy these to Render
+
+# PHP files (not needed on Render)
+*.php
+vendor/
+
+# Frontend assets (not needed on Render)
+assets/
+auth/
+admin/
+reservations/
+bg/
+uploads/
+
+# Database files
+*.sql
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+.env.example
+.htaccess
+composer.json
+composer.lock
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore

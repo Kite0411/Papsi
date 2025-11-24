@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: papsi-chatbot-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT chatbot.app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FLASK_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://blueviolet-seahorse-808517.hostingersite.com
+    healthCheckPath: /health
