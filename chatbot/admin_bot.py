@@ -30,8 +30,13 @@ if not FAQ_FILE.exists():
     pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
 if not PENDING_FILE.exists():
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
-
 CUSTOMER_URL = os.environ.get('CUSTOMER_NOTIFY_URL', 'http://127.0.0.1:5000/notify_customer')
+
+# Ensure files exist
+if not os.path.exists(FAQ_FILE):
+    pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
+if not os.path.exists(PENDING_FILE):
+    pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
 
 current_question = None
 
@@ -136,24 +141,6 @@ def admin_chat():
 
     return jsonify({'reply': reply})
 
-@app.route('/health', methods=['GET'])
-def health():
-    """Simple health check for Render."""
-    return jsonify({
-        "status": "healthy",
-        "pending_count": len(pd.read_csv(PENDING_FILE)) if PENDING_FILE.exists() else 0
-    }), 200
-
-
-@app.route('/', methods=['GET'])
-def root():
-    """Root endpoint for quick diagnostics."""
-    return jsonify({
-        "service": "Papsi Admin Chatbot API",
-        "customer_notify": CUSTOMER_URL,
-    }), 200
-
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 7000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='127.0.0.1', port=7000)
