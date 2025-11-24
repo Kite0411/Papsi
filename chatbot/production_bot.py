@@ -70,6 +70,10 @@ if not PENDING_FILE.exists():
 model = None
 model_loading = False
 model_loaded = False
+INFO_ONLY_KEYWORDS = {
+    'location', 'address', 'where', 'contact', 'phone', 'number',
+    'hours', 'schedule', 'open', 'closing', 'facebook', 'email'
+}
 
 def load_model_background():
     """Load model in background thread to avoid blocking"""
@@ -250,6 +254,11 @@ def keyword_search_services(user_message, services):
     matches.sort(key=lambda x: x[1], reverse=True)
     return matches[:3]
 
+def is_info_only_request(user_message):
+    """Detect if the user only wants business info (no service suggestions)."""
+    text = user_message.lower()
+    return any(keyword in text for keyword in INFO_ONLY_KEYWORDS)
+
 # ==================== HEALTH CHECK (INSTANT RESPONSE) ====================
 
 @app.route('/health', methods=['GET'])
@@ -281,6 +290,7 @@ def chat():
         return jsonify({'reply': "Please describe your vehicle problem so I can assist you."})
 
     reply_parts = []
+    info_only_request = is_info_only_request(user_message)
     
     # ---------- 1️⃣ Check FAQ ----------
     try:
@@ -323,7 +333,7 @@ def chat():
     if faq_reply:
         reply_parts.append(f"🔧 {faq_reply}")
 
-    if top_services:
+    if top_services and not info_only_request:
         reply_parts.append("🧰 Based on your concern, here are some services you might need:")
         for s, score in top_services:
             part = (
