@@ -72,6 +72,30 @@
     exit();
 }
 
+        // --- DECLINE Reservation ---
+        if (isset($_GET['decline'])) {
+            $id = intval($_GET['decline']);
+
+            // Fetch reservation limited to actionable states
+            $stmt = $conn->prepare("SELECT * FROM reservations WHERE id = ? AND status IN ('pending_verification','approved')");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
+
+            if ($res) {
+                $update = $conn->prepare("UPDATE reservations SET status = 'declined' WHERE id = ?");
+                $update->bind_param("i", $id);
+                $update->execute();
+
+                $desc = "Reservation #{$res['id']} for {$res['vehicle_make']} {$res['vehicle_model']} declined by admin '{$_SESSION['username']}'";
+                logAudit('RESERVATION_DECLINED', $desc, $_SESSION['user_id'], $_SESSION['username']);
+                $_SESSION['notif'] = ['message' => 'Reservation declined.', 'type' => 'info'];
+            }
+
+            header("Location: manage_reservations.php");
+            exit();
+        }
+
 
 
         // --- FETCH Active Reservations ---
@@ -149,6 +173,16 @@
     background-color: #ec971f; /* Darker amber on hover */
 }
 
+.decline-btn {
+    background-color: #c62828; /* Red for decline */
+    color: white;
+    margin-left: 10px;
+}
+
+.decline-btn:hover {
+    background-color: #b71c1c;
+}
+
         </style>
         </head>
         <body>
@@ -222,11 +256,15 @@
     <?php 
     if ($row['status'] === 'pending_verification' || $row['method'] === 'Walk-In') {
         echo '<button class="action-btn approve-btn" onclick="window.location.href=\'manage_reservations.php?approve=' . $row['id'] . '\'">✅ Approve</button>';
+        echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
     } else if ($row['status'] === 'approved') {
         echo '<span style="color:green;">Approved</span>';
+        echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
+    } else if ($row['status'] === 'declined') {
+        echo '<span style="color:#c62828;">Declined</span>';
     }
     ?>
-    <button class="action-btn archive-btn" onclick="confirmArchive(<?php echo $row['id']; ?>)">📦 Archive</button>
+    <button class="action-btn archive-btn" onclick="openActionModal(<?php echo $row['id']; ?>, 'archive')">📦 Archive</button>
 </td>
 
         </tr>
@@ -249,16 +287,25 @@
         <?php include "logout-modal.php"; ?>
 
         <script>
-        let archiveId = null;
-        function confirmArchive(id){
-            archiveId = id;
+        let pendingAction = { id: null, type: null };
+        function openActionModal(id, action){
+            pendingAction = { id, type: action };
             const modal = document.getElementById('confirmModal');
-            modal.querySelector('h3').innerText = 'Archive this reservation?';
-            modal.querySelector('#confirmYes').innerText = 'Archive';
+            const title = action === 'decline' ? 'Decline this reservation?' : 'Archive this reservation?';
+            const message = action === 'decline' ? 'This will mark the reservation as declined.' : 'This will move the reservation to archived list.';
+            const cta = action === 'decline' ? 'Decline' : 'Archive';
+            modal.querySelector('h3').innerText = title;
+            modal.querySelector('p').innerText = message;
+            modal.querySelector('#confirmYes').innerText = cta;
             modal.style.display = 'flex';
         }
         document.getElementById('confirmYes').onclick = function(){
-            if(archiveId) window.location.href = "manage_reservations.php?archive=" + archiveId;
+            if(!pendingAction.id || !pendingAction.type) return;
+            if(pendingAction.type === 'decline'){
+                window.location.href = "manage_reservations.php?decline=" + pendingAction.id;
+            } else if(pendingAction.type === 'archive'){
+                window.location.href = "manage_reservations.php?archive=" + pendingAction.id;
+            }
         };
         function closeModal(){ document.getElementById('confirmModal').style.display='none'; }
 
