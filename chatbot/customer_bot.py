@@ -3,6 +3,7 @@ from flask_cors import CORS
 import pandas as pd
 from sentence_transformers import SentenceTransformer, util
 import os
+from pathlib import Path
 import mysql.connector
 from queue import Queue
 
@@ -12,23 +13,45 @@ CORS(app)
 # ---------- DATABASE CONNECTION ----------
 def get_db_connection():
     return mysql.connector.connect(
-        host="127.0.0.1",
-        user="root",
-        password="",
-        database="autorepair_db"
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        user=os.environ.get("DB_USER", "root"),
+        password=os.environ.get("DB_PASSWORD", ""),
+        database=os.environ.get("DB_NAME", "autorepair_db"),
+        port=int(os.environ.get("DB_PORT", 3306))
     )
 
 # ---------- FILES ----------
-FAQ_FILE = 'faq.csv'
-PENDING_FILE = 'pending_questions.csv'
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
 
-if not os.path.exists(FAQ_FILE):
+def resolve_data_file(env_var, default_name):
+    env_path = os.environ.get(env_var)
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    repo_candidate = (ROOT_DIR / default_name).resolve()
+    if repo_candidate.exists():
+        return repo_candidate
+    return (BASE_DIR / default_name).resolve()
+
+FAQ_FILE = resolve_data_file('FAQ_FILE_PATH', 'faq.csv')
+PENDING_FILE = resolve_data_file('PENDING_FILE_PATH', 'pending_questions.csv')
+
+FAQ_FILE.parent.mkdir(parents=True, exist_ok=True)
+PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+if not FAQ_FILE.exists():
     pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
-if not os.path.exists(PENDING_FILE):
+if not PENDING_FILE.exists():
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
 
 # ---------- EMBEDDING MODEL ----------
-model = SentenceTransformer('all-MiniLM-L6-v2')
+try:
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    MODEL_READY = True
+except Exception as exc:
+    print(f"⚠️ Failed to load SentenceTransformer: {exc}")
+    model = None
+    MODEL_READY = False
 
 # ---------- SSE CLIENTS ----------
 clients = []
@@ -99,7 +122,7 @@ def chat():
     faq_reply = None
     similarity_score = 0
 
-    if len(faq_data) > 0:
+    if len(faq_data) > 0 and MODEL_READY:
         questions = faq_data['question'].tolist()
         answers = faq_data['answer'].tolist()
         faq_embeddings = model.encode(questions, convert_to_tensor=True)
@@ -114,7 +137,7 @@ def chat():
     services = get_services_from_db()
     top_services = []
 
-    if services:
+    if services and MODEL_READY:
         text_data = [f"{s['service_name']} {s['description']}" for s in services]
         service_embeddings = model.encode(text_data, convert_to_tensor=True)
         user_emb = model.encode(user_message, convert_to_tensor=True)
@@ -160,5 +183,26 @@ def chat():
     return jsonify({'reply': reply})
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check for uptime monitors."""
+    return jsonify({
+        "status": "healthy",
+        "model_ready": MODEL_READY,
+        "faq_exists": FAQ_FILE.exists(),
+        "pending_exists": PENDING_FILE.exists()
+    }), 200
+
+
+@app.route('/', methods=['GET'])
+def root():
+    """Basic root endpoint."""
+    return jsonify({
+        "service": "Papsi Customer Chatbot API",
+        "model_ready": MODEL_READY
+    }), 200
+
+
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, threaded=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, threaded=True)
