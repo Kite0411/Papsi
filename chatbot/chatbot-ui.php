@@ -308,21 +308,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 600);
 });
 
-// 🧠 Listen for real-time updates from admin bot
-// 🔔 Listen for real-time updates from the admin
-// SSE disabled for Render deployment
-// const eventSource = new EventSource('http://127.0.0.1:5000/stream');
-
+// Real-time updates (SSE) disabled for Render deployment
+// Render free tier doesn't maintain persistent connections well
+// Future: Consider using polling or WebSockets for real-time features
+/*
+const eventSource = new EventSource('http://127.0.0.1:5000/stream');
 eventSource.onmessage = function(event) {
     const data = event.data;
     if (data) {
         addMessage(data.replace(/\n/g, '<br>'), false);
     }
 };
-
 eventSource.onerror = function(err) {
     console.error("SSE connection lost:", err);
 };
+*/
 
 
 
