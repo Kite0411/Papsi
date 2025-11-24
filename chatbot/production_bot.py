@@ -10,6 +10,10 @@ import os
 import mysql.connector
 from queue import Queue
 import threading
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (for local development)
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -123,6 +127,14 @@ def semantic_search_faq(user_message, faq_data):
     try:
         from sentence_transformers import util
         
+        # Filter out rows where question or answer is NaN/empty
+        faq_data = faq_data.dropna(subset=['question', 'answer'])
+        faq_data = faq_data[faq_data['question'].str.strip() != '']
+        faq_data = faq_data[faq_data['answer'].str.strip() != '']
+        
+        if len(faq_data) == 0:
+            return None, 0
+        
         questions = faq_data['question'].tolist()
         answers = faq_data['answer'].tolist()
         
@@ -133,7 +145,8 @@ def semantic_search_faq(user_message, faq_data):
         index = int(similarities.argmax())
         similarity_score = float(similarities[0][index])
         
-        if similarity_score >= 0.4:
+        # Lower threshold for better matching
+        if similarity_score >= 0.35:
             return answers[index], similarity_score
         
         return None, similarity_score
@@ -219,18 +232,31 @@ def chat():
     reply_parts = []
     
     # ---------- 1️⃣ Check FAQ ----------
-    faq_data = pd.read_csv(FAQ_FILE)
-    faq_reply = None
-    
-    if model_loaded:
-        faq_reply, score = semantic_search_faq(user_message, faq_data)
-    else:
-        # Fallback: exact or partial string matching
-        if len(faq_data) > 0:
-            for idx, row in faq_data.iterrows():
-                if user_message.lower() in row['question'].lower():
-                    faq_reply = row['answer']
-                    break
+    try:
+        faq_data = pd.read_csv(FAQ_FILE)
+        # Remove empty rows and the header row if it appears as data
+        faq_data = faq_data.dropna(subset=['question', 'answer'])
+        faq_data = faq_data[faq_data['question'].str.strip() != '']
+        faq_data = faq_data[faq_data['question'] != 'question']  # Remove header if present
+        faq_reply = None
+        
+        if model_loaded:
+            faq_reply, score = semantic_search_faq(user_message, faq_data)
+            print(f"🔍 FAQ Search - Score: {score:.3f}, Match: {faq_reply is not None}")
+        else:
+            # Fallback: exact or partial string matching
+            if len(faq_data) > 0:
+                for idx, row in faq_data.iterrows():
+                    q = str(row['question']).lower()
+                    msg = user_message.lower()
+                    if msg in q or q in msg:
+                        faq_reply = row['answer']
+                        print(f"🔍 FAQ Fallback Match: {row['question']}")
+                        break
+    except Exception as e:
+        print(f"⚠️ Error reading FAQ: {e}")
+        faq_data = pd.DataFrame()
+        faq_reply = None
 
     # ---------- 2️⃣ Check Services ----------
     services = get_services_from_db()
