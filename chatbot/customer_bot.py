@@ -45,13 +45,7 @@ if not PENDING_FILE.exists():
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
 
 # ---------- EMBEDDING MODEL ----------
-try:
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    MODEL_READY = True
-except Exception as exc:
-    print(f"⚠️ Failed to load SentenceTransformer: {exc}")
-    model = None
-    MODEL_READY = False
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # ---------- SSE CLIENTS ----------
 clients = []
@@ -122,7 +116,7 @@ def chat():
     faq_reply = None
     similarity_score = 0
 
-    if len(faq_data) > 0 and MODEL_READY:
+    if len(faq_data) > 0:
         questions = faq_data['question'].tolist()
         answers = faq_data['answer'].tolist()
         faq_embeddings = model.encode(questions, convert_to_tensor=True)
@@ -137,7 +131,7 @@ def chat():
     services = get_services_from_db()
     top_services = []
 
-    if services and MODEL_READY:
+    if services:
         text_data = [f"{s['service_name']} {s['description']}" for s in services]
         service_embeddings = model.encode(text_data, convert_to_tensor=True)
         user_emb = model.encode(user_message, convert_to_tensor=True)
@@ -183,26 +177,5 @@ def chat():
     return jsonify({'reply': reply})
 
 
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check for uptime monitors."""
-    return jsonify({
-        "status": "healthy",
-        "model_ready": MODEL_READY,
-        "faq_exists": FAQ_FILE.exists(),
-        "pending_exists": PENDING_FILE.exists()
-    }), 200
-
-
-@app.route('/', methods=['GET'])
-def root():
-    """Basic root endpoint."""
-    return jsonify({
-        "service": "Papsi Customer Chatbot API",
-        "model_ready": MODEL_READY
-    }), 200
-
-
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, threaded=True)
+    app.run(host='127.0.0.1', port=5000, threaded=True)
