@@ -134,6 +134,7 @@
         table tr:hover { background:#FFEBEE; }
         table a { text-decoration:none; color:var(--primary-red); font-weight:600; margin-right:10px; transition:var(--transition-fast); }
         table a:hover { color:var(--primary-red-dark); text-decoration:underline; }
+.reservations-table { width:100%; }
         .notif-toast { position: fixed; top:25px; left:50%; transform:translateX(-50%) translateY(-20px); color:white; padding:15px 35px; border-radius:8px; font-weight:600; font-size:1rem; text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.2); opacity:0; transition:opacity 0.4s ease, transform 0.4s ease; z-index:9999; }
         .notif-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
         .confirm-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; }
@@ -183,6 +184,27 @@
     background-color: #b71c1c;
 }
 
+@media (max-width: 900px) {
+    .navbar { flex-direction:column; align-items:flex-start; gap:15px; }
+    .navbar ul { flex-direction:column; width:100%; }
+    .navbar ul li a { width:100%; }
+    .container { margin: 40px auto; }
+}
+
+@media (max-width: 768px) {
+    .card { padding:20px; }
+    table, thead, tbody, th, tr { display:block; }
+    table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+    table tr { background:white; margin-bottom:15px; border-radius: var(--radius-md); box-shadow: var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.1)); padding:10px 0; }
+    table td { display:flex; justify-content:space-between; align-items:flex-start; padding:10px 15px; border-bottom:1px solid var(--light-gray); }
+    table td:last-child { border-bottom:none; }
+    table td::before { content: attr(data-label); font-weight:700; padding-right:10px; flex-basis:45%; color:var(--dark-gray); }
+    table td span { display:block; }
+    .action-btn { width:100%; margin:6px 0; }
+    .archive-btn, .decline-btn { margin-left:0; }
+    .approve-btn + .decline-btn { margin-left:0; }
+}
+
         </style>
         </head>
         <body>
@@ -217,7 +239,7 @@
         <div class="container">
         <div class="card">
         <h1>Manage Reservations</h1>
-        <table>
+        <table class="reservations-table">
         <tr>
         <th>Customer</th>
         <th>Service</th>
@@ -244,15 +266,15 @@
         while($s = $services_result->fetch_assoc()){ $services[] = $s; }
         ?>
         <tr>
-        <td><?php echo htmlspecialchars($row['customer_name']); ?></td>
-        <td>
+        <td data-label="Customer"><?php echo htmlspecialchars($row['customer_name']); ?></td>
+        <td data-label="Service">
         <?php if(empty($services)){ echo "<em style='color:gray;'>No linked services</em>"; } else { foreach($services as $s){ echo htmlspecialchars($s['service_name'])."<br>"; } } ?>
         </td>
-        <td><?php foreach($services as $s){ echo $s['duration']." minutes<br>"; } ?></td>
-        <td><?php foreach($services as $s){ echo "₱".number_format($s['price'],2)."<br>"; } ?></td>
-        <td><?php echo date("M j, Y", strtotime($row['reservation_date'])); ?></td>
-        <td><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
-      <td>
+        <td data-label="Duration"><?php foreach($services as $s){ echo $s['duration']." minutes<br>"; } ?></td>
+        <td data-label="Price"><?php foreach($services as $s){ echo "₱".number_format($s['price'],2)."<br>"; } ?></td>
+        <td data-label="Date"><?php echo date("M j, Y", strtotime($row['reservation_date'])); ?></td>
+        <td data-label="Time"><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
+      <td data-label="Action">
     <?php 
     $canApproveWalkIn = $row['method'] === 'Walk-In' && $row['status'] !== 'approved' && $row['status'] !== 'declined';
     if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
