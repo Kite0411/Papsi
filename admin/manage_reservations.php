@@ -254,7 +254,8 @@
         <td><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
       <td>
     <?php 
-    if ($row['status'] === 'pending_verification' || $row['method'] === 'Walk-In') {
+    $canApproveWalkIn = $row['method'] === 'Walk-In' && $row['status'] !== 'approved' && $row['status'] !== 'declined';
+    if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
         echo '<button class="action-btn approve-btn" onclick="window.location.href=\'manage_reservations.php?approve=' . $row['id'] . '\'">✅ Approve</button>';
         echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
     } else if ($row['status'] === 'approved') {
