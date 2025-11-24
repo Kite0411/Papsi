@@ -1,11 +1,8 @@
-pip install flask
-
-pip install flask-cors
-
-pip install pandas
-
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-pip install sentence-transformers
-
-pip install mysql-connector-python
+Flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0
+pandas==2.1.4
+sentence-transformers==2.2.2
+torch==2.1.2
+mysql-connector-python==8.2.0
+requests==2.31.0
