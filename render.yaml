@@ -3,7 +3,7 @@ services:
     name: papsi-chatbot-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT chatbot.app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 2 chatbot.production_bot:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -11,4 +11,15 @@ services:
         value: production
       - key: CORS_ORIGINS
         value: https://blueviolet-seahorse-808517.hostingersite.com
+      # Database connection to Hostinger MySQL
+      - key: DB_HOST
+        value: localhost  # UPDATE THIS with Hostinger MySQL host
+      - key: DB_USER
+        value: u563434200_papsi
+      - key: DB_PASSWORD
+        value: u563434200_@A
+      - key: DB_NAME
+        value: u563434200_papsi
+      - key: DB_PORT
+        value: 3306
     healthCheckPath: /health
