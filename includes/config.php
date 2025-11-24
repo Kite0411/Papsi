@@ -33,7 +33,7 @@ define('FALLBACK_RESPONSES', [
 // Application Settings
 define('APP_NAME', 'Papsi Repair Shop');
 define('APP_VERSION', '2.0.0');
-define('APP_URL', 'https://blueviolet-seahorse-808517.hostingersite.com');
+define('APP_URL', 'https://goldenrod-quetzal-768639.hostingersite.com');
 
 // Security Settings
 define('SESSION_TIMEOUT', 3600); // 1 hour

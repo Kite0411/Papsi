@@ -10,9 +10,9 @@
 
 // Database Configuration - UPDATE THESE IN HOSTINGER
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_USERNAME', getenv('DB_USERNAME') ?: 'u563434200_papsi');
+define('DB_USERNAME', getenv('DB_USERNAME') ?: 'u563434200_papsipaps');
 define('DB_PASSWORD', getenv('DB_PASSWORD') ?: 'u563434200_@A');
-define('DB_NAME', getenv('DB_NAME') ?: 'u563434200_papsi');
+define('DB_NAME', getenv('DB_NAME') ?: 'u563434200_papsipaps');
 
 // Chatbot API URL - IMPORTANT: Set this to your Render service URL
 define('CHATBOT_API_URL', getenv('CHATBOT_API_URL') ?: 'https://your-render-service.onrender.com');
@@ -42,7 +42,7 @@ define('FALLBACK_RESPONSES', [
 // Application Settings
 define('APP_NAME', 'Papsi Repair Shop');
 define('APP_VERSION', '2.0.0');
-define('APP_URL', getenv('APP_URL') ?: 'https://blueviolet-seahorse-808517.hostingersite.com');
+define('APP_URL', getenv('APP_URL') ?: 'https://goldenrod-quetzal-768639.hostingersite.com');
 
 // Security Settings
 define('SESSION_TIMEOUT', 3600);

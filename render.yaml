@@ -10,7 +10,7 @@ services:
       - key: FLASK_ENV
         value: production
       - key: CORS_ORIGINS
-        value: https://blueviolet-seahorse-808517.hostingersite.com
+        value: https://goldenrod-quetzal-768639.hostingersite.com
       # Database connection to Hostinger MySQL
       - key: DB_HOST
         value: auth-db1983.hstgr.io
