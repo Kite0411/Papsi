@@ -123,7 +123,7 @@
   - Includes timeout and better error handling
 */
 
-const API_URL = '/chatbot/chat_proxy.php'; // must match your Flask address
+const API_URL = 'http://127.0.0.1:5000/chat'; // must match your Flask address
 let chatbotMinimized = true;
 let isTyping = false;
 let welcomeShown = false;
@@ -273,7 +273,7 @@ async function sendChatbotMessage() {
         if (err.name === 'AbortError') {
             addMessage('Sorry, the request timed out. The model may be busy or the server is not responding.', false);
         } else {
-            addMessage('Sorry, I\'m having trouble connecting to the chatbot server. Please try again in a moment', false);
+            addMessage('Sorry, I\'m having trouble connecting to the chatbot server. Make sure Flask is running at http://127.0.0.1:5000', false);
             console.error('Chatbot error:', err);
         }
     } finally {
@@ -310,8 +310,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 🧠 Listen for real-time updates from admin bot
 // 🔔 Listen for real-time updates from the admin
-// SSE disabled for Render deployment
-// const eventSource = new EventSource('http://127.0.0.1:5000/stream');
+const eventSource = new EventSource('http://127.0.0.1:5000/stream');
 
 eventSource.onmessage = function(event) {
     const data = event.data;
