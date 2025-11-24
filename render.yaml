@@ -13,7 +13,7 @@ services:
         value: https://blueviolet-seahorse-808517.hostingersite.com
       # Database connection to Hostinger MySQL
       - key: DB_HOST
-        value: localhost  # UPDATE THIS with Hostinger MySQL host
+        value: auth-db1983.hstgr.io
       - key: DB_USER
         value: u563434200_papsi
       - key: DB_PASSWORD
