@@ -10,6 +10,7 @@ import os
 import mysql.connector
 from queue import Queue
 import threading
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file (for local development)
@@ -37,14 +38,30 @@ DB_CONFIG = {
     'port': int(os.environ.get('DB_PORT', 3306))
 }
 
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+
+def resolve_data_file(env_var, default_name):
+    """Resolve CSV path with env override and repo-level fallback."""
+    env_path = os.environ.get(env_var)
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    repo_candidate = (ROOT_DIR / default_name).resolve()
+    if repo_candidate.exists():
+        return repo_candidate
+    return (BASE_DIR / default_name).resolve()
+
 # Files
-FAQ_FILE = os.path.join(os.path.dirname(__file__), 'faq.csv')
-PENDING_FILE = os.path.join(os.path.dirname(__file__), 'pending_questions.csv')
+FAQ_FILE = resolve_data_file('FAQ_FILE_PATH', 'faq.csv')
+PENDING_FILE = resolve_data_file('PENDING_FILE_PATH', 'pending_questions.csv')
 
 # Initialize CSV files
-if not os.path.exists(FAQ_FILE):
+FAQ_FILE.parent.mkdir(parents=True, exist_ok=True)
+PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+if not FAQ_FILE.exists():
     pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
-if not os.path.exists(PENDING_FILE):
+if not PENDING_FILE.exists():
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
 
 # ==================== AI MODEL - LAZY LOADING ====================
