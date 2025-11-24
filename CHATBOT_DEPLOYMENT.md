@@ -89,11 +89,11 @@ Edit `render.yaml` (already done, but verify):
 - key: DB_HOST
   value: YOUR_HOSTINGER_MYSQL_HOST  # e.g., sql123.hostinger.com
 - key: DB_USER
-  value: u563434200_papsi
+  value: u563434200_papsipaps
 - key: DB_PASSWORD
   value: u563434200_@A
 - key: DB_NAME
-  value: u563434200_papsi
+  value: u563434200_papsipaps
 ```
 
 ### Step 3: Deploy to Render
@@ -260,9 +260,9 @@ If database shows "disconnected" in health check:
    import mysql.connector
    conn = mysql.connector.connect(
        host="YOUR_REMOTE_HOST",
-       user="u563434200_papsi",
+       user="u563434200_papsipaps",
        password="u563434200_@A",
-       database="u563434200_papsi"
+       database="u563434200_papsipaps"
    )
    print("✅ Connected!")
    ```

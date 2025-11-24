@@ -119,9 +119,9 @@ curl -X POST https://your-render-service.onrender.com/chat \
 2. **Verify database credentials** in `includes/config.php`:
    ```php
    define('DB_HOST', 'localhost');
-   define('DB_USERNAME', 'u563434200_papsi');
+   define('DB_USERNAME', 'u563434200_papsipaps');
    define('DB_PASSWORD', 'u563434200_@A');
-   define('DB_NAME', 'u563434200_papsi');
+   define('DB_NAME', 'u563434200_papsipaps');
    ```
 
 ### Step 3: Upload to Hostinger
@@ -153,7 +153,7 @@ curl -X POST https://your-render-service.onrender.com/chat \
 ### Step 4: Setup Database
 
 1. In Hostinger control panel, go to **Databases** → **phpMyAdmin**
-2. Select your database: `u563434200_papsi`
+2. Select your database: `u563434200_papsipaps`
 3. Click **Import** tab
 4. Choose `autorepair_db.sql` file
 5. Click **Go** to import

@@ -119,7 +119,7 @@ define('CHATBOT_API_URL', 'https://your-render-service.onrender.com');
 
 #### Import Database:
 1. **Databases** → **phpMyAdmin**
-2. Select: `u563434200_papsi`
+2. Select: `u563434200_papsipaps`
 3. **Import** → Choose `autorepair_db.sql`
 4. Click **Go**
 
