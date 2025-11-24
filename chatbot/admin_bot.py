@@ -2,20 +2,36 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import os
+from pathlib import Path
 import requests
 
 app = Flask(__name__)
 CORS(app)
 
-FAQ_FILE = 'faq.csv'
-PENDING_FILE = 'pending_questions.csv'
-CUSTOMER_URL = 'http://127.0.0.1:5000/notify_customer'  # ✅ Fixed endpoint
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
 
-# Ensure files exist
-if not os.path.exists(FAQ_FILE):
+def resolve_data_file(env_var, default_name):
+    env_path = os.environ.get(env_var)
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    repo_candidate = (ROOT_DIR / default_name).resolve()
+    if repo_candidate.exists():
+        return repo_candidate
+    return (BASE_DIR / default_name).resolve()
+
+FAQ_FILE = resolve_data_file('FAQ_FILE_PATH', 'faq.csv')
+PENDING_FILE = resolve_data_file('PENDING_FILE_PATH', 'pending_questions.csv')
+
+FAQ_FILE.parent.mkdir(parents=True, exist_ok=True)
+PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+if not FAQ_FILE.exists():
     pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
-if not os.path.exists(PENDING_FILE):
+if not PENDING_FILE.exists():
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
+
+CUSTOMER_URL = os.environ.get('CUSTOMER_NOTIFY_URL', 'http://127.0.0.1:5000/notify_customer')
 
 current_question = None
 
@@ -120,6 +136,24 @@ def admin_chat():
 
     return jsonify({'reply': reply})
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Simple health check for Render."""
+    return jsonify({
+        "status": "healthy",
+        "pending_count": len(pd.read_csv(PENDING_FILE)) if PENDING_FILE.exists() else 0
+    }), 200
+
+
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint for quick diagnostics."""
+    return jsonify({
+        "service": "Papsi Admin Chatbot API",
+        "customer_notify": CUSTOMER_URL,
+    }), 200
+
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=7000)
+    port = int(os.environ.get('PORT', 7000))
+    app.run(host='0.0.0.0', port=port)
