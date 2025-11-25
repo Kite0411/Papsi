@@ -127,6 +127,15 @@ const API_URL = '/chatbot/chat_proxy.php'; // must match your Flask address
 let chatbotMinimized = true;
 let isTyping = false;
 let welcomeShown = false;
+  
+  // Real-time answers from admin
+const customerSSE = new EventSource('https://papsi-chatbot-api.onrender.com/stream');
+customerSSE.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    if (data.type === 'answer_received') {
+        addMessage(`✅ <strong>Update from mechanic:</strong>\n${data.answer}`, false);
+    }
+};
 
 function toggleChatbot() {
     const chatbot = document.getElementById('chatbot');
