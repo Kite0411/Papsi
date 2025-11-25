@@ -1,5 +1,5 @@
-// 🔥 PRODUCTION CONFIGURATION - Your actual Render URL
-const RENDER_URL = 'https://papsi-chatbot-api.onrender.com';
+// 🔥 PRODUCTION CONFIGURATION - Admin-specific Render URL
+const RENDER_URL = 'https://papsi-admin-chatbot.onrender.com'; // Admin-specific URL
 
 // Use the unified bot endpoints (already in production_bot.py)
 const API_URL = `${RENDER_URL}/admin_chat`;
