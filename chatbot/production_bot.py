@@ -1,6 +1,6 @@
 """
-Papsi Repair Shop - Lightweight Chatbot API
-OPTIMIZED FOR RENDER 512MB - No AI Model Dependencies
+Papsi Repair Shop - Ultra-Lightweight Chatbot API
+OPTIMIZED FOR RENDER 512MB - Using Ultra-Light AI Models
 """
 
 from flask import Flask, request, jsonify, Response
@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import json
 import re
 import traceback
+import gc
 
 load_dotenv()
 app = Flask(__name__)
@@ -39,16 +40,32 @@ DB_CONFIG = {
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# Use absolute paths - Render has specific file system requirements
+# Use absolute paths
 FAQ_FILE = BASE_DIR / 'faq.csv'
 PENDING_FILE = BASE_DIR / 'pending_questions.csv'
 
-# Initialize files with error handling
+# Initialize files
 def initialize_files():
     try:
         if not FAQ_FILE.exists():
-            pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
-            print("✅ Created FAQ file")
+            sample_faq = pd.DataFrame({
+                'question': [
+                    'What are your operating hours?',
+                    'How much does an oil change cost?',
+                    'My car is making strange noises',
+                    'Brakes are squeaking',
+                    'Engine won\'t start'
+                ],
+                'answer': [
+                    'We\'re open Monday to Saturday, 8 AM to 6 PM.',
+                    'Basic oil change starts at ₱800. Synthetic oil changes start at ₱1,200.',
+                    'That could be various issues. We recommend bringing it in for diagnosis.',
+                    'Squeaky brakes often need pad replacement. We offer free brake inspections.',
+                    'This could be battery, starter, or fuel system issues. We can diagnose it for you.'
+                ]
+            })
+            sample_faq.to_csv(FAQ_FILE, index=False)
+            print("✅ Created sample FAQ file")
         
         if not PENDING_FILE.exists():
             pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
@@ -66,7 +83,67 @@ def initialize_files():
 
 initialize_files()
 
-print("🤖 Lightweight Chatbot Started - No AI Model Dependencies")
+# ==================== ULTRA-LIGHTWEIGHT AI MODEL ====================
+model = None
+model_loaded = False
+model_type = None  # 'sentence_transformers', 'tfidf', or None
+
+def load_ultra_light_model():
+    """Load the lightest possible AI model with fallbacks"""
+    global model, model_loaded, model_type
+    
+    print("🚀 Loading ULTRA-LIGHT AI model...")
+    
+    # Force garbage collection first
+    gc.collect()
+    
+    try:
+        # OPTION 1: Lightest Sentence Transformer (22MB)
+        from sentence_transformers import SentenceTransformer
+        print("📥 Downloading all-MiniLM-L6-v2 (22MB)...")
+        model = SentenceTransformer('all-MiniLM-L6-v2')
+        model_loaded = True
+        model_type = 'sentence_transformers'
+        print("✅ Ultra-light SentenceTransformer loaded! (22MB)")
+        return
+        
+    except Exception as e:
+        print(f"⚠️ SentenceTransformer failed: {e}")
+    
+    try:
+        # OPTION 2: TF-IDF (Almost no memory)
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+        model = {
+            'vectorizer': TfidfVectorizer(),
+            'similarity': cosine_similarity
+        }
+        model_loaded = True
+        model_type = 'tfidf'
+        print("✅ TF-IDF model loaded (minimal memory)")
+        return
+        
+    except Exception as e:
+        print(f"⚠️ TF-IDF failed: {e}")
+    
+    # OPTION 3: No model - pure keyword matching
+    print("🔧 No AI model - using enhanced keyword matching only")
+    model_loaded = False
+    model_type = None
+
+# Load model in background thread to prevent blocking
+def load_model_background():
+    """Load model in background to prevent app startup blocking"""
+    try:
+        load_ultra_light_model()
+    except Exception as e:
+        print(f"💥 Model loading thread crashed: {e}")
+        model_loaded = False
+
+print("🔄 Starting model loading in background...")
+model_thread = threading.Thread(target=load_model_background)
+model_thread.daemon = True
+model_thread.start()
 
 # ==================== SSE ====================
 clients = []
@@ -79,7 +156,7 @@ def send_sse_message(data):
         except Exception:
             clients.remove(q)
 
-# ==================== ENHANCED KEYWORD MATCHING ====================
+# ==================== HYBRID SEARCH SYSTEM ====================
 def preprocess_text(text):
     """Clean and preprocess text for better matching"""
     if not isinstance(text, str):
@@ -88,8 +165,90 @@ def preprocess_text(text):
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     return text
 
-def enhanced_keyword_search(user_message, faq_data):
-    """Enhanced keyword matching - SIMPLIFIED VERSION"""
+def hybrid_search_faq(user_message, faq_data):
+    """Smart hybrid search: AI first, then keyword fallback"""
+    
+    # Try AI model first if available
+    if model_loaded:
+        if model_type == 'sentence_transformers':
+            result = semantic_search(user_message, faq_data)
+            if result[0] is not None:
+                print(f"🤖 AI found match (score: {result[1]:.3f})")
+                return result
+        elif model_type == 'tfidf':
+            result = tfidf_search(user_message, faq_data)
+            if result[0] is not None:
+                print(f"🤖 TF-IDF found match (score: {result[1]:.3f})")
+                return result
+    
+    # Fallback to keyword matching
+    print("🔍 AI not available, using keyword matching")
+    return keyword_search(user_message, faq_data)
+
+def semantic_search(user_message, faq_data):
+    """Ultra-light semantic search with memory optimization"""
+    if not model_loaded or model_type != 'sentence_transformers':
+        return None, 0
+        
+    try:
+        from sentence_transformers import util
+        
+        # Clean and prepare data
+        faq_data = faq_data.dropna(subset=['question', 'answer'])
+        faq_data = faq_data[faq_data['question'].str.strip() != '']
+        faq_data = faq_data[faq_data['answer'].str.strip() != '']
+        
+        if len(faq_data) == 0:
+            return None, 0
+            
+        questions = faq_data['question'].tolist()
+        answers = faq_data['answer'].tolist()
+        
+        # Encode with small batch size to save memory
+        faq_embeddings = model.encode(questions, convert_to_tensor=True, batch_size=4, show_progress_bar=False)
+        user_emb = model.encode(user_message, convert_to_tensor=True)
+        
+        # Calculate similarities
+        similarities = util.cos_sim(user_emb, faq_embeddings)[0]
+        best_idx = similarities.argmax()
+        best_score = float(similarities[best_idx])
+        
+        if best_score >= 0.3:  # Slightly higher threshold for better accuracy
+            return answers[best_idx], best_score
+        return None, best_score
+        
+    except Exception as e:
+        print(f"⚠️ Semantic search error: {e}")
+        return None, 0
+
+def tfidf_search(user_message, faq_data):
+    """Lightweight TF-IDF search"""
+    try:
+        questions = faq_data['question'].tolist()
+        answers = faq_data['answer'].tolist()
+        
+        # Fit TF-IDF
+        vectorizer = model['vectorizer']
+        tfidf_matrix = vectorizer.fit_transform(questions)
+        
+        # Transform user message
+        user_vector = vectorizer.transform([user_message])
+        
+        # Calculate similarities
+        similarities = model['similarity'](user_vector, tfidf_matrix)[0]
+        best_idx = similarities.argmax()
+        best_score = similarities[best_idx]
+        
+        if best_score > 0.2:
+            return answers[best_idx], best_score
+        return None, best_score
+        
+    except Exception as e:
+        print(f"⚠️ TF-IDF search error: {e}")
+        return None, 0
+
+def keyword_search(user_message, faq_data):
+    """Enhanced keyword matching as final fallback"""
     try:
         user_clean = preprocess_text(user_message)
         user_words = set(user_clean.split())
@@ -113,14 +272,19 @@ def enhanced_keyword_search(user_message, faq_data):
             if not common_words:
                 continue
                 
-            # Simple scoring
+            # Calculate match score
             score = len(common_words) / len(user_words)
             
-            # Bonus for exact matches
+            # Bonus for exact phrase matches
             if user_clean in question:
                 score += 0.5
                 
-            if score > best_score and score > 0.1:  # Lower threshold
+            # Bonus for longer matching words
+            for word in common_words:
+                if len(word) > 4:
+                    score += 0.1
+            
+            if score > best_score and score > 0.2:
                 best_score = score
                 best_match = answer
                 
@@ -130,44 +294,41 @@ def enhanced_keyword_search(user_message, faq_data):
         print(f"⚠️ Keyword search error: {e}")
         return None, 0
 
-def keyword_search_services_enhanced(user_message, services):
-    """Enhanced service search - SIMPLIFIED"""
-    try:
-        user_clean = preprocess_text(user_message)
-        user_words = [word for word in user_clean.split() if len(word) > 2]
-        
-        if not user_words:
-            return []
-            
-        matches = []
-        
-        for service in services:
-            name = preprocess_text(service['service_name'])
-            desc = preprocess_text(service['description'])
-            
-            score = 0
-            
-            # Check for keyword matches
-            for keyword in user_words:
-                if keyword in name:
-                    score += 2.0
-                elif keyword in desc:
-                    score += 1.0
-                    
-            # Exact phrase bonus
-            if user_clean in name or user_clean in desc:
-                score += 3.0
-                
-            if score > 0:
-                matches.append((service, score))
-                
-        # Return top 3 matches
-        matches.sort(key=lambda x: x[1], reverse=True)
-        return matches[:3]
-        
-    except Exception as e:
-        print(f"⚠️ Service search error: {e}")
+def hybrid_search_services(user_message, services):
+    """Hybrid service search"""
+    user_clean = preprocess_text(user_message)
+    user_words = [word for word in user_clean.split() if len(word) > 2]
+    
+    if not user_words:
         return []
+        
+    matches = []
+    
+    for service in services:
+        name = preprocess_text(service['service_name'])
+        desc = preprocess_text(service['description'])
+        
+        score = 0
+        
+        # Keyword matching
+        for keyword in user_words:
+            if keyword in name:
+                score += 2.0
+            elif keyword in desc:
+                score += 1.0
+                
+        # Exact phrase bonus
+        if user_clean in name:
+            score += 3.0
+        elif user_clean in desc:
+            score += 2.0
+            
+        if score > 0.5:
+            matches.append((service, score))
+            
+    # Return top 3 matches
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches[:3]
 
 # ==================== DATABASE ====================
 
@@ -204,7 +365,7 @@ def get_services_from_db():
 # ==================== PENDING QUESTIONS ====================
 
 def save_pending_question(question):
-    """Save pending question - SIMPLIFIED"""
+    """Save pending question"""
     try:
         if not isinstance(question, str) or not question.strip():
             return False
@@ -241,7 +402,7 @@ def save_pending_question(question):
         return False
 
 def get_pending_questions():
-    """Get all pending questions - SIMPLIFIED"""
+    """Get all pending questions"""
     try:
         if not PENDING_FILE.exists():
             return []
@@ -278,8 +439,9 @@ def remove_pending_question(question):
 def health():
     return jsonify({
         "status": "healthy",
-        "mode": "keyword-matching",
-        "memory": "optimized"
+        "model_loaded": model_loaded,
+        "model_type": model_type,
+        "mode": "ultra-light-ai"
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -287,8 +449,9 @@ def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
         "status": "running",
-        "version": "lightweight-1.0",
-        "message": "Optimized for Render 512MB"
+        "version": "ultra-light-ai-1.0",
+        "model_status": "loaded" if model_loaded else "loading",
+        "model_type": model_type
     }), 200
 
 @app.route('/test', methods=['GET'])
@@ -301,14 +464,19 @@ def test():
         
         # Test database
         services = get_services_from_db()
-        db_works = len(services) >= 0  # Even if empty, connection works
+        db_works = len(services) >= 0
+        
+        # Test model
+        model_status = "loaded" if model_loaded else "failed"
         
         return jsonify({
             "status": "success",
             "faq_file": faq_exists,
             "pending_file": pending_exists,
             "database": db_works,
-            "services_count": len(services)
+            "services_count": len(services),
+            "model_status": model_status,
+            "model_type": model_type
         })
         
     except Exception as e:
@@ -319,7 +487,7 @@ def test():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint - ROBUST VERSION"""
+    """Customer chatbot endpoint with hybrid AI search"""
     try:
         # Get and validate input
         data = request.get_json()
@@ -333,18 +501,18 @@ def chat():
         print(f"📨 Received: {user_message}")
         reply_parts = []
         
-        # Check FAQ
+        # Check FAQ with hybrid search
         try:
             faq_data = pd.read_csv(FAQ_FILE)
             faq_data = faq_data.dropna(subset=['question', 'answer'])
             faq_data = faq_data[faq_data['question'].str.strip() != '']
             faq_data = faq_data[faq_data['answer'].str.strip() != '']
             
-            faq_reply, score = enhanced_keyword_search(user_message, faq_data)
+            faq_reply, score = hybrid_search_faq(user_message, faq_data)
             
             if faq_reply:
                 reply_parts.append(f"🔧 {faq_reply}")
-                print(f"✅ Found FAQ match (score: {score:.2f})")
+                print(f"✅ Found FAQ match (score: {score:.3f})")
                 
         except Exception as e:
             print(f"⚠️ FAQ processing error: {e}")
@@ -353,7 +521,7 @@ def chat():
         # Check Services
         try:
             services = get_services_from_db()
-            top_services = keyword_search_services_enhanced(user_message, services)
+            top_services = hybrid_search_services(user_message, services)
             
             if top_services:
                 reply_parts.append("🧰 Based on your concern, here are some services:")
@@ -505,7 +673,13 @@ def stream():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n🚀 Starting OPTIMIZED Papsi Chatbot on port {port}")
-    print("💡 Running in LIGHTWEIGHT mode - No AI model dependencies")
+    print(f"\n🚀 Starting ULTRA-LIGHT Papsi Chatbot on port {port}")
+    print("💡 Using hybrid AI system with fallbacks")
+    print("🎯 Model priority: SentenceTransformer → TF-IDF → Keyword Matching")
     print("📊 Memory optimized for Render 512MB")
+    
+    # Wait a bit for model to load
+    import time
+    time.sleep(2)
+    
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
