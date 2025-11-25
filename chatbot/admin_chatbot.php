@@ -79,15 +79,12 @@
 </div>
 
 <script>
-const API_BASE = "https://papsi-admin-chatbot.onrender.com";
-
-// Correct endpoints
-const SAVE_URL = `${API_BASE}/save_answer`;
-const PENDING_URL = `${API_BASE}/pending`;
+const API_URL = 'https://papsi-admin-chatbot.onrender.com/admin_chat';
+const POLL_URL = 'https://papsi-admin-chatbot.onrender.com/get_next_question';
 
 let currentQuestion = null;
 
-// Display message in UI
+// Display message in the chat window
 function addMessage(content, isUser = false) {
     const messages = document.getElementById('chatbotMessages');
     const div = document.createElement('div');
@@ -100,34 +97,31 @@ function addMessage(content, isUser = false) {
     messages.scrollTop = messages.scrollHeight;
 }
 
-// Load pending questions into UI
+// Load the next pending question from backend
 async function loadPending() {
     const listDiv = document.getElementById("pendingList");
 
     try {
-        const res = await fetch(PENDING_URL);
-        const pending = await res.json(); // this is an array
+        const res = await fetch(POLL_URL);
+        const data = await res.json();
 
         listDiv.innerHTML = "";
 
-        if (pending.length === 0) {
+        if (!data.new) {
             listDiv.innerHTML = "<i>No pending questions.</i>";
             currentQuestion = null;
             return;
         }
 
-        // Display first pending question
-        currentQuestion = pending[0].question;
+        // Set current question
+        currentQuestion = data.question;
 
-        listDiv.innerHTML = `
-            <b>Pending Question:</b><br>
-            ❓ ${currentQuestion}
-        `;
-
+        listDiv.innerHTML = `<b>Pending Question:</b><br>❓ ${currentQuestion}`;
         addMessage("📌 New pending question loaded:\n" + currentQuestion);
 
     } catch (err) {
         listDiv.innerHTML = "<span style='color:red'>Error loading pending questions</span>";
+        console.error(err);
     }
 }
 
@@ -146,49 +140,64 @@ async function sendChatbotMessage() {
     input.value = "";
 
     try {
-        const res = await fetch(SAVE_URL, {
+        const res = await fetch(API_URL, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                question: currentQuestion,
-                answer: answer
-            })
+            body: JSON.stringify({ message: answer })
         });
 
         const data = await res.json();
 
-        if (data.status === "success") {
-            addMessage("✅ Answer saved! Removed from pending.");
-            loadPending();
-        } else {
-            addMessage("❌ Error: " + data.message);
-        }
+        // Admin backend always returns 'reply'
+        if (data.reply) addMessage(data.reply);
+
+        // Reload next question
+        await loadPending();
 
     } catch (err) {
         addMessage("❌ Connection error to admin backend.");
+        console.error(err);
     }
 }
 
-// Enter key sends
-document.getElementById('chatbotInput')
-    .addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendChatbotMessage();
-        }
-    });
+// Allow Enter key to send message
+document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendChatbotMessage();
+    }
+});
 
 // Poll pending questions every 5 seconds
 setInterval(() => {
     loadPending();
 }, 5000);
 
-// Initial load
+// Initial load on page ready
 document.addEventListener('DOMContentLoaded', () => {
     addMessage("👋 Checking for pending customer questions...");
     loadPending();
 });
+
+// Toggle chatbot UI
+let chatbotMinimized = false;
+function toggleChatbot() {
+    const chatbot = document.getElementById('adminChatbot');
+    const toggle = document.getElementById('chatbotToggle');
+    const body = document.getElementById('chatbotBody');
+    chatbotMinimized = !chatbotMinimized;
+    if (chatbotMinimized) {
+        chatbot.classList.add('chatbot-minimized');
+        toggle.textContent = '+';
+        body.style.display = 'none';
+    } else {
+        chatbot.classList.remove('chatbot-minimized');
+        toggle.textContent = '−';
+        body.style.display = 'flex';
+    }
+}
 </script>
+
 
 
 
