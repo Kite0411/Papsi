@@ -1,6 +1,6 @@
 """
-Papsi Repair Shop - Unified Chatbot API
-CRITICAL FIX: Pending questions now properly save and retrieve
+Papsi Repair Shop - Lightweight Chatbot API
+OPTIMIZED FOR RENDER 512MB - No AI Model Dependencies
 """
 
 from flask import Flask, request, jsonify, Response
@@ -13,6 +13,8 @@ import threading
 from pathlib import Path
 from dotenv import load_dotenv
 import json
+import re
+import traceback
 
 load_dotenv()
 app = Flask(__name__)
@@ -36,333 +38,224 @@ DB_CONFIG = {
 }
 
 BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
 
-def resolve_data_file(env_var, default_name):
-    env_path = os.environ.get(env_var)
-    if env_path:
-        return Path(env_path).expanduser().resolve()
-    repo_candidate = (ROOT_DIR / default_name).resolve()
-    if repo_candidate.exists():
-        return repo_candidate
-    return (BASE_DIR / default_name).resolve()
+# Use absolute paths - Render has specific file system requirements
+FAQ_FILE = BASE_DIR / 'faq.csv'
+PENDING_FILE = BASE_DIR / 'pending_questions.csv'
 
-FAQ_FILE = resolve_data_file('FAQ_FILE_PATH', 'faq.csv')
-PENDING_FILE = resolve_data_file('PENDING_FILE_PATH', 'pending_questions.csv')
-
-FAQ_FILE.parent.mkdir(parents=True, exist_ok=True)
-PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-# Initialize files
-if not FAQ_FILE.exists():
-    pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
-    
-if not PENDING_FILE.exists():
-    pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
-
-print(f"📁 FAQ File: {FAQ_FILE}")
-print(f"📁 Pending File: {PENDING_FILE}")
-
-# ==================== AI MODEL ====================
-model = None
-model_loading = False
-model_loaded = False
-
-def load_lightweight_model():
-    global model, model_loaded
-    print("🤖 Loading LIGHTWEIGHT AI model...")
+# Initialize files with error handling
+def initialize_files():
     try:
-        # Option A: Ultra-light sentence transformer (~22MB)
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('all-MiniLM-L6-v2')  # Only 22MB!
-        model_loaded = True
-        print("✅ Lightweight model loaded (22MB)")
+        if not FAQ_FILE.exists():
+            pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
+            print("✅ Created FAQ file")
         
-        # Option B: Even lighter - TF-IDF with scikit-learn (no GPU needed)
-        # from sklearn.feature_extraction.text import TfidfVectorizer
-        # from sklearn.metrics.pairwise import cosine_similarity
-        # model = 'tfidf'  # We'll handle this differently
+        if not PENDING_FILE.exists():
+            pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
+            print("✅ Created pending questions file")
+            
+        # Verify we can read the files
+        faq_test = pd.read_csv(FAQ_FILE)
+        pending_test = pd.read_csv(PENDING_FILE)
+        print(f"📁 FAQ File: {len(faq_test)} entries")
+        print(f"📁 Pending File: {len(pending_test)} entries")
         
     except Exception as e:
-        print(f"⚠️ Model loading failed: {e}")
-        print("🔄 Falling back to keyword matching...")
-        model_loaded = False
+        print(f"❌ File initialization error: {e}")
+        traceback.print_exc()
 
-# Load model synchronously on startup
-load_lightweight_model()
+initialize_files()
+
+print("🤖 Lightweight Chatbot Started - No AI Model Dependencies")
+
 # ==================== SSE ====================
 clients = []
-question_subscriptions = {}  # Track which clients are waiting for which questions
 
-def send_sse_message(data, question_filter=None):
-    """Send SSE message to all clients or specific question subscribers"""
+def send_sse_message(data):
+    """Send SSE message to all connected clients"""
     for q in clients[:]:
         try:
-            # If question_filter specified, only send to subscribers of that question
-            if question_filter and question_filter in question_subscriptions:
-                if q in question_subscriptions[question_filter]:
-                    q.put(data, timeout=0.2)
-            # Otherwise send to all clients
-            elif not question_filter:
-                q.put(data, timeout=0.2)
+            q.put(data, timeout=0.2)
         except Exception:
             clients.remove(q)
 
-def subscribe_to_question(client_queue, question):
-    """Subscribe a client to updates for a specific question"""
-    if question not in question_subscriptions:
-        question_subscriptions[question] = []
-    if client_queue not in question_subscriptions[question]:
-        question_subscriptions[question].append(client_queue)
-
+# ==================== ENHANCED KEYWORD MATCHING ====================
 def preprocess_text(text):
     """Clean and preprocess text for better matching"""
+    if not isinstance(text, str):
+        return ""
     text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     return text
 
 def enhanced_keyword_search(user_message, faq_data):
-    """Enhanced keyword matching without AI model"""
-    user_clean = preprocess_text(user_message)
-    user_words = set(user_clean.split())
-    
-    best_match = None
-    best_score = 0
-    
-    for idx, row in faq_data.iterrows():
-        question = preprocess_text(str(row['question']))
-        answer = str(row['answer'])
+    """Enhanced keyword matching - SIMPLIFIED VERSION"""
+    try:
+        user_clean = preprocess_text(user_message)
+        user_words = set(user_clean.split())
         
-        question_words = set(question.split())
-        common_words = user_words.intersection(question_words)
+        # Remove very short words
+        user_words = {word for word in user_words if len(word) > 2}
         
         if not user_words:
-            continue
+            return None, 0
             
-        # Basic word overlap score
-        score = len(common_words) / len(user_words)
+        best_match = None
+        best_score = 0
         
-        # Bonus for exact phrase matches
-        if user_clean in question:
-            score += 0.3
-        
-        # Bonus for longer common words
-        for word in common_words:
-            if len(word) > 4:
-                score += 0.05
-        
-        if score > best_score and score > 0.2:  # Lower threshold
-            best_score = score
-            best_match = answer
-    
-    return best_match, best_score
-
-def keyword_search_services_enhanced(user_message, services):
-    """Enhanced service search without AI"""
-    user_clean = preprocess_text(user_message)
-    user_words = user_clean.split()
-    
-    matches = []
-    for service in services:
-        name = preprocess_text(service['service_name'])
-        desc = preprocess_text(service['description'])
-        
-        score = 0
-        
-        # Check each keyword
-        for keyword in user_words:
-            if len(keyword) < 3:
+        for idx, row in faq_data.iterrows():
+            question = preprocess_text(str(row['question']))
+            answer = str(row['answer'])
+            
+            question_words = set(question.split())
+            common_words = user_words.intersection(question_words)
+            
+            if not common_words:
                 continue
                 
-            if keyword in name:
-                score += 2.0
-            elif keyword in desc:
-                score += 1.0
+            # Simple scoring
+            score = len(common_words) / len(user_words)
+            
+            # Bonus for exact matches
+            if user_clean in question:
+                score += 0.5
+                
+            if score > best_score and score > 0.1:  # Lower threshold
+                best_score = score
+                best_match = answer
+                
+        return best_match, best_score
         
-        # Exact phrase bonus
-        if any(user_clean in text for text in [name, desc]):
-            score += 3.0
-        
-        if score > 0.5:
-            matches.append((service, score))
-    
-    matches.sort(key=lambda x: x[1], reverse=True)
-    return matches[:3]
+    except Exception as e:
+        print(f"⚠️ Keyword search error: {e}")
+        return None, 0
 
+def keyword_search_services_enhanced(user_message, services):
+    """Enhanced service search - SIMPLIFIED"""
+    try:
+        user_clean = preprocess_text(user_message)
+        user_words = [word for word in user_clean.split() if len(word) > 2]
+        
+        if not user_words:
+            return []
+            
+        matches = []
+        
+        for service in services:
+            name = preprocess_text(service['service_name'])
+            desc = preprocess_text(service['description'])
+            
+            score = 0
+            
+            # Check for keyword matches
+            for keyword in user_words:
+                if keyword in name:
+                    score += 2.0
+                elif keyword in desc:
+                    score += 1.0
+                    
+            # Exact phrase bonus
+            if user_clean in name or user_clean in desc:
+                score += 3.0
+                
+            if score > 0:
+                matches.append((service, score))
+                
+        # Return top 3 matches
+        matches.sort(key=lambda x: x[1], reverse=True)
+        return matches[:3]
+        
+    except Exception as e:
+        print(f"⚠️ Service search error: {e}")
+        return []
 
 # ==================== DATABASE ====================
 
 def get_db_connection():
+    """Get database connection with error handling"""
     try:
-        return mysql.connector.connect(**DB_CONFIG)
+        conn = mysql.connector.connect(**DB_CONFIG)
+        return conn
     except mysql.connector.Error as e:
-        print(f"⚠️ DB error: {e}")
+        print(f"⚠️ DB connection error: {e}")
         return None
 
 def get_services_from_db():
+    """Get services from database with error handling"""
     try:
         conn = get_db_connection()
         if not conn:
+            print("❌ No database connection")
             return []
+            
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT service_name, description, duration, price FROM services WHERE is_archived = 0")
         services = cursor.fetchall()
         cursor.close()
         conn.close()
+        
+        print(f"✅ Loaded {len(services)} services from database")
         return services
+        
     except Exception as e:
         print(f"⚠️ Service query error: {e}")
         return []
 
-# ==================== SEMANTIC SEARCH ====================
-
-def semantic_search_faq(user_message, faq_data):
-    if not model_loaded or model is None or len(faq_data) == 0:
-        return None, 0
-    try:
-        from sentence_transformers import util
-        faq_data = faq_data.dropna(subset=['question', 'answer'])
-        faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_data = faq_data[faq_data['answer'].str.strip() != '']
-        if len(faq_data) == 0:
-            return None, 0
-        questions = faq_data['question'].tolist()
-        answers = faq_data['answer'].tolist()
-        faq_embeddings = model.encode(questions, convert_to_tensor=True)
-        user_emb = model.encode(user_message, convert_to_tensor=True)
-        similarities = util.cos_sim(user_emb, faq_embeddings)[0]
-        user_keywords = set(user_message.lower().split())
-        boosted_scores = []
-        for i, question in enumerate(questions):
-            score = float(similarities[i])
-            question_keywords = set(question.lower().split())
-            matches = len(user_keywords & question_keywords)
-            if matches > 0:
-                boost = min(matches * 0.1, 0.3)
-                score += boost
-            boosted_scores.append((i, score))
-        best_idx, best_score = max(boosted_scores, key=lambda x: x[1])
-        if best_score >= 0.25:
-            return answers[best_idx], best_score
-        return None, best_score
-    except Exception as e:
-        print(f"⚠️ FAQ search error: {e}")
-        return None, 0
-
-def semantic_search_services(user_message, services):
-    if not model_loaded or model is None or not services:
-        return []
-    try:
-        from sentence_transformers import util
-        text_data = [f"{s['service_name']} {s['description']}" for s in services]
-        service_embeddings = model.encode(text_data, convert_to_tensor=True)
-        user_emb = model.encode(user_message, convert_to_tensor=True)
-        similarities = util.cos_sim(user_emb, service_embeddings)[0]
-        scores = similarities.cpu().tolist()
-        ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        top_services = []
-        for idx, score in ranked[:3]:
-            if score > 0.25:
-                top_services.append((services[idx], score))
-        return top_services
-    except Exception as e:
-        print(f"⚠️ Service search error: {e}")
-        return []
-
-def keyword_search_services(user_message, services):
-    keywords = user_message.lower().split()
-    matches = []
-    for service in services:
-        name = service['service_name'].lower()
-        desc = service['description'].lower()
-        score = sum(1 for kw in keywords if kw in name or kw in desc)
-        if score > 0:
-            matches.append((service, score))
-    matches.sort(key=lambda x: x[1], reverse=True)
-    return matches[:3]
-
-# ==================== PENDING QUESTIONS - CRITICAL FIX ====================
+# ==================== PENDING QUESTIONS ====================
 
 def save_pending_question(question):
-    """Save pending question - THREAD-SAFE VERSION"""
+    """Save pending question - SIMPLIFIED"""
     try:
-        # Read current state
+        if not isinstance(question, str) or not question.strip():
+            return False
+            
+        question_clean = question.strip()
+        
+        # Read current pending questions
         if PENDING_FILE.exists():
-            try:
-                pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
-            except:
-                pending = pd.DataFrame(columns=['question'])
+            pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
         else:
             pending = pd.DataFrame(columns=['question'])
         
-        # Clean up
+        # Clean data
         pending = pending.dropna(subset=['question'])
-        pending['question'] = pending['question'].str.strip()
+        pending['question'] = pending['question'].astype(str).str.strip()
         pending = pending[pending['question'] != '']
-        pending = pending[pending['question'] != 'question']  # Remove header if present
         
-        # Check duplicate
-        question_clean = question.strip()
+        # Check for duplicates
         if question_clean in pending['question'].values:
-            print(f"⏭️ Already pending: {question_clean}")
+            print(f"⏭️ Question already pending: {question_clean}")
             return False
         
-        # Add new
+        # Add new question
         new_row = pd.DataFrame({'question': [question_clean]})
         pending = pd.concat([pending, new_row], ignore_index=True)
         
-        # Save atomically
-        pending.to_csv(PENDING_FILE, index=False, encoding='utf-8')
-        
-        print(f"✅ SAVED TO PENDING: {question_clean}")
-        print(f"📊 Total pending: {len(pending)}")
-        
-        # Verify immediately
-        verify = pd.read_csv(PENDING_FILE, dtype={'question': str})
-        print(f"🔍 VERIFY: File now has {len(verify)} rows")
-        
+        # Save
+        pending.to_csv(PENDING_FILE, index=False)
+        print(f"✅ Saved to pending: {question_clean}")
         return True
         
     except Exception as e:
-        print(f"⚠️ ERROR saving pending: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Error saving pending question: {e}")
         return False
 
 def get_pending_questions():
-    """Get all pending questions - DEBUG VERSION"""
+    """Get all pending questions - SIMPLIFIED"""
     try:
-        print(f"📂 Reading from: {PENDING_FILE}")
-        print(f"📂 File exists: {PENDING_FILE.exists()}")
-        
         if not PENDING_FILE.exists():
-            print("⚠️ File doesn't exist!")
             return []
-        
-        # Read with explicit dtype
-        pending = pd.read_csv(PENDING_FILE, dtype={'question': str}, keep_default_na=False)
-        
-        print(f"📊 RAW CSV:")
-        print(pending.to_string())
-        print(f"📊 Columns: {pending.columns.tolist()}")
-        print(f"📊 Shape: {pending.shape}")
-        
-        # Clean
+            
+        pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
         pending = pending.dropna(subset=['question'])
-        pending['question'] = pending['question'].str.strip()
+        pending['question'] = pending['question'].astype(str).str.strip()
         pending = pending[pending['question'] != '']
-        pending = pending[pending['question'] != 'question']
         
         questions = pending['question'].tolist()
-        
-        print(f"📋 RETURNING {len(questions)} questions: {questions}")
-        
         return questions
         
     except Exception as e:
-        print(f"⚠️ ERROR reading pending: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Error reading pending questions: {e}")
         return []
 
 def remove_pending_question(question):
@@ -370,12 +263,14 @@ def remove_pending_question(question):
     try:
         if not PENDING_FILE.exists():
             return
+            
         pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
         pending = pending[pending['question'] != question]
         pending.to_csv(PENDING_FILE, index=False)
-        print(f"🗑️ Removed: {question}")
+        print(f"🗑️ Removed from pending: {question}")
+        
     except Exception as e:
-        print(f"⚠️ Remove error: {e}")
+        print(f"❌ Error removing pending question: {e}")
 
 # ==================== ENDPOINTS ====================
 
@@ -383,7 +278,8 @@ def remove_pending_question(question):
 def health():
     return jsonify({
         "status": "healthy",
-        "model_status": "loaded" if model_loaded else ("loading" if model_loading else "not_loaded")
+        "mode": "keyword-matching",
+        "memory": "optimized"
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -391,70 +287,115 @@ def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
         "status": "running",
-        "model_ready": model_loaded
+        "version": "lightweight-1.0",
+        "message": "Optimized for Render 512MB"
     }), 200
+
+@app.route('/test', methods=['GET'])
+def test():
+    """Test endpoint to verify all components"""
+    try:
+        # Test files
+        faq_exists = FAQ_FILE.exists()
+        pending_exists = PENDING_FILE.exists()
+        
+        # Test database
+        services = get_services_from_db()
+        db_works = len(services) >= 0  # Even if empty, connection works
+        
+        return jsonify({
+            "status": "success",
+            "faq_file": faq_exists,
+            "pending_file": pending_exists,
+            "database": db_works,
+            "services_count": len(services)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint - MODEL-FREE VERSION"""
-    data = request.get_json()
-    user_message = data.get('message', '').strip()
-
-    if not user_message:
-        return jsonify({'reply': "Please describe your vehicle problem."})
-
-    reply_parts = []
-    
-    # Check FAQ with enhanced keyword matching
+    """Customer chatbot endpoint - ROBUST VERSION"""
     try:
-        faq_data = pd.read_csv(FAQ_FILE)
-        faq_data = faq_data.dropna(subset=['question', 'answer'])
-        faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_data = faq_data[faq_data['answer'].str.strip() != '']
+        # Get and validate input
+        data = request.get_json()
+        if not data:
+            return jsonify({'reply': "Please provide a message in JSON format."}), 400
+            
+        user_message = data.get('message', '').strip()
+        if not user_message:
+            return jsonify({'reply': "Please describe your vehicle problem."})
+
+        print(f"📨 Received: {user_message}")
+        reply_parts = []
         
-        faq_reply, score = enhanced_keyword_search(user_message, faq_data)
+        # Check FAQ
+        try:
+            faq_data = pd.read_csv(FAQ_FILE)
+            faq_data = faq_data.dropna(subset=['question', 'answer'])
+            faq_data = faq_data[faq_data['question'].str.strip() != '']
+            faq_data = faq_data[faq_data['answer'].str.strip() != '']
+            
+            faq_reply, score = enhanced_keyword_search(user_message, faq_data)
+            
+            if faq_reply:
+                reply_parts.append(f"🔧 {faq_reply}")
+                print(f"✅ Found FAQ match (score: {score:.2f})")
+                
+        except Exception as e:
+            print(f"⚠️ FAQ processing error: {e}")
+            faq_reply = None
+
+        # Check Services
+        try:
+            services = get_services_from_db()
+            top_services = keyword_search_services_enhanced(user_message, services)
+            
+            if top_services:
+                reply_parts.append("🧰 Based on your concern, here are some services:")
+                for service, score in top_services:
+                    part = (
+                        f"• **{service['service_name']}**\n"
+                        f"📝 {service['description']}\n"
+                        f"🕒 Duration: {service['duration']}\n"
+                        f"💰 Price: ₱{float(service['price']):,.2f}"
+                    )
+                    reply_parts.append(part)
+                print(f"✅ Found {len(top_services)} service matches")
+                
+        except Exception as e:
+            print(f"⚠️ Service processing error: {e}")
+            top_services = []
+
+        # If no matches found, forward to admin
+        if not reply_parts:
+            saved = save_pending_question(user_message)
+            
+            if saved:
+                reply_parts.append(
+                    "🤖 I'm not sure about that yet. I've forwarded your question to our admin. "
+                    "You'll be updated soon!"
+                )
+                print(f"📤 Forwarded to admin: {user_message}")
+            else:
+                reply_parts.append(
+                    "🤖 Your question is already being reviewed by our admin. "
+                    "You'll be updated soon!"
+                )
+
+        reply = "\n\n".join(reply_parts)
+        return jsonify({'reply': reply})
         
     except Exception as e:
-        print(f"⚠️ FAQ error: {e}")
-        faq_reply = None
-
-    # Check Services with enhanced keyword matching
-    services = get_services_from_db()
-    top_services = keyword_search_services_enhanced(user_message, services)
-
-    # Build reply
-    if faq_reply:
-        reply_parts.append(f"🔧 {faq_reply}")
-
-    if top_services:
-        reply_parts.append("🧰 Based on your concern, here are some services:")
-        for service, score in top_services:
-            part = (
-                f"• **{service['service_name']}**\n"
-                f"📝 {service['description']}\n"
-                f"🕒 Duration: {service['duration']}\n"
-                f"💰 Price: ₱{float(service['price']):,.2f}"
-            )
-            reply_parts.append(part)
-
-    if not faq_reply and not top_services:
-        # Forward to admin
-        saved = save_pending_question(user_message)
-        
-        if saved:
-            reply_parts.append(
-                "🤖 I'm not sure about that yet. I've forwarded your question to our admin. "
-                "You'll be updated soon!"
-            )
-            print(f"📤 FORWARDED TO ADMIN: {user_message}")
-        else:
-            reply_parts.append(
-                "🤖 Your question is already being reviewed by our admin. "
-                "You'll be updated soon!"
-            )
-
-    reply = "\n\n".join(reply_parts)
-    return jsonify({'reply': reply})
+        print(f"💥 Critical error in /chat: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'reply': "I'm experiencing technical difficulties. Please try again in a moment."
+        }), 500
 
 # ==================== ADMIN ENDPOINTS ====================
 
@@ -462,21 +403,13 @@ current_question = None
 
 @app.route('/pending', methods=['GET'])
 def get_pending():
-    """Get all pending questions - WITH DEBUG"""
-    print("\n" + "="*50)
-    print("🌐 /pending endpoint called")
-    
+    """Get all pending questions"""
     questions = get_pending_questions()
-    
-    print(f"🌐 Returning to client: {questions}")
-    print(f"🌐 JSON length: {len(json.dumps(questions))}")
-    print("="*50 + "\n")
-    
     return jsonify(questions)
 
 @app.route('/get_next_question', methods=['GET'])
 def get_next_question():
-    """Get the next pending question for admin - FIXED VERSION"""
+    """Get the next pending question for admin"""
     global current_question
     
     questions = get_pending_questions()
@@ -485,126 +418,94 @@ def get_next_question():
         current_question = None
         return jsonify({'new': False})
 
-    # If no current question OR if current question is no longer in the list
     if current_question is None or current_question not in questions:
         current_question = questions[0]
         return jsonify({'new': True, 'question': current_question})
 
-    # If current question is still first in list, no new question
     if current_question == questions[0]:
         return jsonify({'new': False})
     
-    # If list changed and current question moved/different
     current_question = questions[0]
     return jsonify({'new': True, 'question': current_question})
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
-    """Admin chatbot endpoint - ENHANCED with better notifications"""
+    """Admin chatbot endpoint"""
     global current_question
-    data = request.get_json()
-    message = data.get('message', '').strip()
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
 
-    if not message:
-        return jsonify({'reply': 'Please type something.'})
+        if not message:
+            return jsonify({'reply': 'Please type something.'})
 
-    if current_question is None:
+        if current_question is None:
+            questions = get_pending_questions()
+            if not questions:
+                return jsonify({'reply': '✅ No pending questions.'})
+            current_question = questions[0]
+            return jsonify({'reply': f"❓ {current_question}\n\nProvide your answer:"})
+
+        # Save answer
+        question = current_question
+        answer = message
+
+        # Add to FAQ
+        try:
+            faq = pd.read_csv(FAQ_FILE)
+            # Remove existing entry if any
+            faq = faq[faq['question'] != question]
+            new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
+            faq = pd.concat([faq, new_row], ignore_index=True)
+            faq.to_csv(FAQ_FILE, index=False)
+            print(f"✅ Added to FAQ: {question}")
+        except Exception as e:
+            print(f"⚠️ FAQ save error: {e}")
+
+        # Remove from pending
+        remove_pending_question(question)
+
+        # Notify customers
+        notification_message = f"✅ **Update on your question:**\n\n\"{question}\"\n\n**Admin Response:** {answer}"
+        send_sse_message(notification_message)
+
+        # Get next question
+        current_question = None
         questions = get_pending_questions()
-        if not questions:
-            return jsonify({'reply': '✅ No pending questions.'})
-        current_question = questions[0]
-        return jsonify({'reply': f"❓ {current_question}\n\nProvide your answer:"})
 
-    # Save answer
-    question = current_question
-    answer = message
+        if questions:
+            next_q = questions[0]
+            current_question = next_q
+            reply = f"✅ Answer saved and customer notified!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
+        else:
+            reply = "✅ Answer saved and customer notified! No more pending questions."
 
-    try:
-        faq = pd.read_csv(FAQ_FILE)
-        faq = faq.drop_duplicates(subset=['question'], keep='last')
-        faq = faq[faq['question'] != question]
-        new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
-        faq = pd.concat([faq, new_row], ignore_index=True)
-        faq.to_csv(FAQ_FILE, index=False)
-        print(f"✅ Saved to FAQ: {question} -> {answer}")
+        return jsonify({'reply': reply})
+        
     except Exception as e:
-        print(f"⚠️ FAQ save error: {e}")
-
-    # Remove from pending
-    remove_pending_question(question)
-
-    # 🆕 ENHANCED: Notify customers with better formatting
-    notification_message = f"✅ **Update on your question:**\n\n\"{question}\"\n\n**Admin Response:** {answer}"
-    send_sse_message(notification_message, question)
-
-    # Check for next
-    current_question = None
-    questions = get_pending_questions()
-
-    if questions:
-        next_q = questions[0]
-        current_question = next_q
-        reply = f"✅ Answer saved and customer notified!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
-    else:
-        reply = "✅ Answer saved and customer notified! No more pending questions."
-
-    return jsonify({'reply': reply})
-
-
-@app.route('/notify_customer', methods=['POST'])
-def notify_customer():
-    """Notify customers"""
-    data = request.get_json()
-    question = data.get("question")
-    answer = data.get("answer")
-
-    if not question or not answer:
-        return jsonify({"reply": "Invalid data"}), 400
-
-    try:
-        faq = pd.read_csv(FAQ_FILE)
-        new_entry = pd.DataFrame({'question': [question], 'answer': [answer]})
-        faq = pd.concat([faq, new_entry], ignore_index=True)
-        faq.to_csv(FAQ_FILE, index=False)
-        send_sse_message(f"✅ Update: {answer}")
-    except Exception as e:
-        print(f"⚠️ Notify error: {e}")
-
-    return jsonify({"reply": "Notified."})
+        print(f"💥 Admin chat error: {e}")
+        return jsonify({'reply': 'Error processing request.'}), 500
 
 @app.route('/stream')
 def stream():
     """SSE endpoint for customer updates"""
-    q = Queue()
-    clients.append(q)
+    def event_stream():
+        q = Queue()
+        clients.append(q)
+        try:
+            while True:
+                msg = q.get()
+                yield f"data: {json.dumps({'message': msg})}\n\n"
+        except GeneratorExit:
+            clients.remove(q)
     
-    def event_stream(queue):
-        while True:
-            msg = queue.get()
-            yield f"data: {json.dumps({'message': msg})}\n\n"
-    
-    return Response(event_stream(q), mimetype="text/event-stream")
-
-
-@app.route('/subscribe_question', methods=['POST'])
-def subscribe_question():
-    """Subscribe to updates for a specific question"""
-    data = request.get_json()
-    question = data.get('question', '').strip()
-    
-    if not question:
-        return jsonify({'error': 'Question required'}), 400
-    
-    # This is a simplified version - in production you'd track session IDs
-    q = Queue()
-    clients.append(q)
-    subscribe_to_question(q, question)
-    
-    return jsonify({'status': 'subscribed', 'question': question})
+    return Response(event_stream(), mimetype="text/event-stream")
 
 # ==================== RUN ====================
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n🚀 Starting Papsi Chatbot on port {port}\n")
+    print(f"\n🚀 Starting OPTIMIZED Papsi Chatbot on port {port}")
+    print("💡 Running in LIGHTWEIGHT mode - No AI model dependencies")
+    print("📊 Memory optimized for Render 512MB")
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
