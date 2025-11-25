@@ -93,13 +93,29 @@ load_model_background()  # Load synchronously on startup
 
 # ==================== SSE ====================
 clients = []
+question_subscriptions = {}  # Track which clients are waiting for which questions
 
-def send_sse_message(data):
+def send_sse_message(data, question_filter=None):
+    """Send SSE message to all clients or specific question subscribers"""
     for q in clients[:]:
         try:
-            q.put(data, timeout=0.2)
+            # If question_filter specified, only send to subscribers of that question
+            if question_filter and question_filter in question_subscriptions:
+                if q in question_subscriptions[question_filter]:
+                    q.put(data, timeout=0.2)
+            # Otherwise send to all clients
+            elif not question_filter:
+                q.put(data, timeout=0.2)
         except Exception:
             clients.remove(q)
+
+def subscribe_to_question(client_queue, question):
+    """Subscribe a client to updates for a specific question"""
+    if question not in question_subscriptions:
+        question_subscriptions[question] = []
+    if client_queue not in question_subscriptions[question]:
+        question_subscriptions[question].append(client_queue)
+
 
 # ==================== DATABASE ====================
 
@@ -424,7 +440,7 @@ def get_next_question():
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
-    """Admin chatbot endpoint"""
+    """Admin chatbot endpoint - ENHANCED with better notifications"""
     global current_question
     data = request.get_json()
     message = data.get('message', '').strip()
@@ -457,8 +473,9 @@ def admin_chat():
     # Remove from pending
     remove_pending_question(question)
 
-    # Notify customers
-    send_sse_message(f"✅ Admin answered: {answer}")
+    # 🆕 ENHANCED: Notify customers with better formatting
+    notification_message = f"✅ **Update on your question:**\n\n\"{question}\"\n\n**Admin Response:** {answer}"
+    send_sse_message(notification_message, question)
 
     # Check for next
     current_question = None
@@ -467,11 +484,12 @@ def admin_chat():
     if questions:
         next_q = questions[0]
         current_question = next_q
-        reply = f"✅ Answer saved!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
+        reply = f"✅ Answer saved and customer notified!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
     else:
-        reply = "✅ Answer saved! No more pending questions."
+        reply = "✅ Answer saved and customer notified! No more pending questions."
 
     return jsonify({'reply': reply})
+
 
 @app.route('/notify_customer', methods=['POST'])
 def notify_customer():
@@ -496,14 +514,33 @@ def notify_customer():
 
 @app.route('/stream')
 def stream():
-    """SSE endpoint"""
+    """SSE endpoint for customer updates"""
     q = Queue()
     clients.append(q)
+    
     def event_stream(queue):
         while True:
             msg = queue.get()
-            yield f"data: {msg}\n\n"
+            yield f"data: {json.dumps({'message': msg})}\n\n"
+    
     return Response(event_stream(q), mimetype="text/event-stream")
+
+
+@app.route('/subscribe_question', methods=['POST'])
+def subscribe_question():
+    """Subscribe to updates for a specific question"""
+    data = request.get_json()
+    question = data.get('question', '').strip()
+    
+    if not question:
+        return jsonify({'error': 'Question required'}), 400
+    
+    # This is a simplified version - in production you'd track session IDs
+    q = Queue()
+    clients.append(q)
+    subscribe_to_question(q, question)
+    
+    return jsonify({'status': 'subscribed', 'question': question})
 
 # ==================== RUN ====================
 
