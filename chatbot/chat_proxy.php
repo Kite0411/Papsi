@@ -1,11 +1,11 @@
 <?php
 /**
  * Chat Proxy - Routes requests from frontend to Render API
- * This file should be uploaded to Hostinger
+ * FIXED VERSION - Better error handling and logging
  */
 
 // Prevent any output before JSON response
-error_reporting(0);
+error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ob_start();
 
@@ -32,11 +32,13 @@ if (empty($userMessage)) {
 }
 
 // ==================== RENDER API CONFIGURATION ====================
-// IMPORTANT: Replace this with YOUR actual Render service URL
+// 🔥 CRITICAL: Your actual Render service URL
 $RENDER_API_URL = "https://papsi-chatbot-api.onrender.com/chat";
 
-// If you want to use environment variable or config file:
-// $RENDER_API_URL = getenv('CHATBOT_API_URL') ?: "https://your-default-url.onrender.com/chat";
+// Log the request (for debugging)
+$logFile = __DIR__ . '/chat_proxy.log';
+$logMessage = date('Y-m-d H:i:s') . " - User Message: $userMessage\n";
+@file_put_contents($logFile, $logMessage, FILE_APPEND);
 
 // ==================== CALL RENDER API ====================
 
@@ -60,6 +62,10 @@ $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
 curl_close($ch);
 
+// Log the response (for debugging)
+$logMessage = date('Y-m-d H:i:s') . " - HTTP Code: $httpCode - Response: " . substr($response, 0, 200) . "\n";
+@file_put_contents($logFile, $logMessage, FILE_APPEND);
+
 // ==================== HANDLE RESPONSE ====================
 
 if ($httpCode === 200 && $response) {
@@ -73,6 +79,10 @@ if ($httpCode === 200 && $response) {
             'type' => 'success'
         ]);
     } else {
+        // Invalid JSON response
+        $logMessage = date('Y-m-d H:i:s') . " - Invalid JSON Response: $response\n";
+        @file_put_contents($logFile, $logMessage, FILE_APPEND);
+        
         ob_clean();
         echo json_encode([
             'reply' => 'Sorry, I received an invalid response. Please try again.',
@@ -81,12 +91,18 @@ if ($httpCode === 200 && $response) {
     }
 } else {
     // Error - log and return friendly message
-    error_log("Render API Error: HTTP $httpCode - $curlError - URL: $RENDER_API_URL");
+    $errorLog = date('Y-m-d H:i:s') . " - Render API Error: HTTP $httpCode - $curlError - URL: $RENDER_API_URL\n";
+    @file_put_contents($logFile, $errorLog, FILE_APPEND);
 
     ob_clean();
     echo json_encode([
-        'reply' => "I'm having trouble connecting to my brain right now 🤖. Please try again in a moment! (This might take 30-60 seconds on the first request if the service was sleeping)",
-        'type' => 'error'
+        'reply' => "I'm having trouble connecting to my brain right now 🤖. Please try again in a moment! (Error: HTTP $httpCode)",
+        'type' => 'error',
+        'debug' => [
+            'http_code' => $httpCode,
+            'error' => $curlError,
+            'api_url' => $RENDER_API_URL
+        ]
     ]);
 }
 
