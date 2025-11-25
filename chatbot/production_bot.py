@@ -400,7 +400,7 @@ def get_pending():
 
 @app.route('/get_next_question', methods=['GET'])
 def get_next_question():
-    """Check for new pending questions"""
+    """Get the next pending question for admin - FIXED VERSION"""
     global current_question
     
     questions = get_pending_questions()
@@ -409,11 +409,18 @@ def get_next_question():
         current_question = None
         return jsonify({'new': False})
 
-    if current_question is None:
+    # If no current question OR if current question is no longer in the list
+    if current_question is None or current_question not in questions:
         current_question = questions[0]
         return jsonify({'new': True, 'question': current_question})
 
-    return jsonify({'new': False})
+    # If current question is still first in list, no new question
+    if current_question == questions[0]:
+        return jsonify({'new': False})
+    
+    # If list changed and current question moved/different
+    current_question = questions[0]
+    return jsonify({'new': True, 'question': current_question})
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
