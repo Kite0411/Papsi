@@ -76,7 +76,7 @@ def load_model_background():
     print("🤖 Loading AI model...")
     try:
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('all-MiniLM-L6-v2')
+        model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
         model_loaded = True
         print("✅ AI model loaded")
     except Exception as e:
