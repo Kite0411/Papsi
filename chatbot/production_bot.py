@@ -68,29 +68,28 @@ model = None
 model_loading = False
 model_loaded = False
 
-def load_model_background():
-    global model, model_loading, model_loaded
-    if model_loaded or model_loading:
-        return
-    model_loading = True
-    print("🤖 Loading AI model...")
+def load_lightweight_model():
+    global model, model_loaded
+    print("🤖 Loading LIGHTWEIGHT AI model...")
     try:
+        # Option A: Ultra-light sentence transformer (~22MB)
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('all-MiniLM-L6-v2')  
+        model = SentenceTransformer('all-MiniLM-L6-v2')  # Only 22MB!
         model_loaded = True
-        print("✅ AI model loaded")
+        print("✅ Lightweight model loaded (22MB)")
+        
+        # Option B: Even lighter - TF-IDF with scikit-learn (no GPU needed)
+        # from sklearn.feature_extraction.text import TfidfVectorizer
+        # from sklearn.metrics.pairwise import cosine_similarity
+        # model = 'tfidf'  # We'll handle this differently
+        
     except Exception as e:
-        print(f"⚠️ Model error: {e}")
+        print(f"⚠️ Model loading failed: {e}")
+        print("🔄 Falling back to keyword matching...")
         model_loaded = False
-    finally:
-        model_loading = False
 
-# REMOVE THIS:
-threading.Thread(target=load_model_background, daemon=True).start()
-
-# REPLACE WITH THIS:
-load_model_background()  # Load synchronously on startup
-
+# Load model synchronously on startup
+load_lightweight_model()
 # ==================== SSE ====================
 clients = []
 question_subscriptions = {}  # Track which clients are waiting for which questions
@@ -115,6 +114,80 @@ def subscribe_to_question(client_queue, question):
         question_subscriptions[question] = []
     if client_queue not in question_subscriptions[question]:
         question_subscriptions[question].append(client_queue)
+
+def preprocess_text(text):
+    """Clean and preprocess text for better matching"""
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    return text
+
+def enhanced_keyword_search(user_message, faq_data):
+    """Enhanced keyword matching without AI model"""
+    user_clean = preprocess_text(user_message)
+    user_words = set(user_clean.split())
+    
+    best_match = None
+    best_score = 0
+    
+    for idx, row in faq_data.iterrows():
+        question = preprocess_text(str(row['question']))
+        answer = str(row['answer'])
+        
+        question_words = set(question.split())
+        common_words = user_words.intersection(question_words)
+        
+        if not user_words:
+            continue
+            
+        # Basic word overlap score
+        score = len(common_words) / len(user_words)
+        
+        # Bonus for exact phrase matches
+        if user_clean in question:
+            score += 0.3
+        
+        # Bonus for longer common words
+        for word in common_words:
+            if len(word) > 4:
+                score += 0.05
+        
+        if score > best_score and score > 0.2:  # Lower threshold
+            best_score = score
+            best_match = answer
+    
+    return best_match, best_score
+
+def keyword_search_services_enhanced(user_message, services):
+    """Enhanced service search without AI"""
+    user_clean = preprocess_text(user_message)
+    user_words = user_clean.split()
+    
+    matches = []
+    for service in services:
+        name = preprocess_text(service['service_name'])
+        desc = preprocess_text(service['description'])
+        
+        score = 0
+        
+        # Check each keyword
+        for keyword in user_words:
+            if len(keyword) < 3:
+                continue
+                
+            if keyword in name:
+                score += 2.0
+            elif keyword in desc:
+                score += 1.0
+        
+        # Exact phrase bonus
+        if any(user_clean in text for text in [name, desc]):
+            score += 3.0
+        
+        if score > 0.5:
+            matches.append((service, score))
+    
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches[:3]
 
 
 # ==================== DATABASE ====================
@@ -323,7 +396,7 @@ def root():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint"""
+    """Customer chatbot endpoint - MODEL-FREE VERSION"""
     data = request.get_json()
     user_message = data.get('message', '').strip()
 
@@ -332,35 +405,22 @@ def chat():
 
     reply_parts = []
     
-    # Check FAQ
+    # Check FAQ with enhanced keyword matching
     try:
         faq_data = pd.read_csv(FAQ_FILE)
         faq_data = faq_data.dropna(subset=['question', 'answer'])
         faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_reply = None
+        faq_data = faq_data[faq_data['answer'].str.strip() != '']
         
-        if model_loaded:
-            faq_reply, score = semantic_search_faq(user_message, faq_data)
-        else:
-            if len(faq_data) > 0:
-                for idx, row in faq_data.iterrows():
-                    q = str(row['question']).lower()
-                    msg = user_message.lower()
-                    if msg in q or q in msg:
-                        faq_reply = row['answer']
-                        break
+        faq_reply, score = enhanced_keyword_search(user_message, faq_data)
+        
     except Exception as e:
         print(f"⚠️ FAQ error: {e}")
         faq_reply = None
 
-    # Check Services
+    # Check Services with enhanced keyword matching
     services = get_services_from_db()
-    top_services = []
-    
-    if model_loaded:
-        top_services = semantic_search_services(user_message, services)
-    else:
-        top_services = keyword_search_services(user_message, services)
+    top_services = keyword_search_services_enhanced(user_message, services)
 
     # Build reply
     if faq_reply:
@@ -368,12 +428,12 @@ def chat():
 
     if top_services:
         reply_parts.append("🧰 Based on your concern, here are some services:")
-        for s, score in top_services:
+        for service, score in top_services:
             part = (
-                f"• **{s['service_name']}**\n"
-                f"📝 {s['description']}\n"
-                f"🕒 Duration: {s['duration']}\n"
-                f"💰 Price: ₱{float(s['price']):,.2f}"
+                f"• **{service['service_name']}**\n"
+                f"📝 {service['description']}\n"
+                f"🕒 Duration: {service['duration']}\n"
+                f"💰 Price: ₱{float(service['price']):,.2f}"
             )
             reply_parts.append(part)
 
