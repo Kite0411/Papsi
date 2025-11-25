@@ -79,26 +79,15 @@
 </div>
 
 <script>
-const API_URL = 'https://papsi-admin-chatbot.onrender.com/save_answer';
-const POLL_URL = 'https://papsi-admin-chatbot.onrender.com/pending';
-let chatbotMinimized = false;
+const API_BASE = "https://papsi-admin-chatbot.onrender.com";
 
-function toggleChatbot() {
-    const chatbot = document.getElementById('adminChatbot');
-    const toggle = document.getElementById('chatbotToggle');
-    const body = document.getElementById('chatbotBody');
-    chatbotMinimized = !chatbotMinimized;
-    if (chatbotMinimized) {
-        chatbot.classList.add('chatbot-minimized');
-        toggle.textContent = '+';
-        body.style.display = 'none';
-    } else {
-        chatbot.classList.remove('chatbot-minimized');
-        toggle.textContent = '−';
-        body.style.display = 'flex';
-    }
-}
+// Correct endpoints
+const SAVE_URL = `${API_BASE}/save_answer`;
+const PENDING_URL = `${API_BASE}/pending`;
 
+let currentQuestion = null;
+
+// Display message in UI
 function addMessage(content, isUser = false) {
     const messages = document.getElementById('chatbotMessages');
     const div = document.createElement('div');
@@ -111,63 +100,93 @@ function addMessage(content, isUser = false) {
     messages.scrollTop = messages.scrollHeight;
 }
 
-async function sendChatbotMessage() {
-    const input = document.getElementById('chatbotInput');
-    const message = input.value.trim();
-    if (!message) return;
-
-    addMessage(message, true);
-    input.value = '';
+// Load pending questions into UI
+async function loadPending() {
+    const listDiv = document.getElementById("pendingList");
 
     try {
-        const resp = await fetch(API_URL, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ message })
-        });
-        const data = await resp.json();
-        addMessage(data.reply || "✅ Answer saved!");
-    } catch (e) {
-        addMessage("❌ Connection error. Make sure the admin bot (port 7000) is running.");
+        const res = await fetch(PENDING_URL);
+        const pending = await res.json(); // this is an array
+
+        listDiv.innerHTML = "";
+
+        if (pending.length === 0) {
+            listDiv.innerHTML = "<i>No pending questions.</i>";
+            currentQuestion = null;
+            return;
+        }
+
+        // Display first pending question
+        currentQuestion = pending[0].question;
+
+        listDiv.innerHTML = `
+            <b>Pending Question:</b><br>
+            ❓ ${currentQuestion}
+        `;
+
+        addMessage("📌 New pending question loaded:\n" + currentQuestion);
+
+    } catch (err) {
+        listDiv.innerHTML = "<span style='color:red'>Error loading pending questions</span>";
     }
 }
 
-// Allow pressing Enter to send
-document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChatbotMessage();
-    }
-});
+// Send admin answer to backend
+async function sendChatbotMessage() {
+    const input = document.getElementById('chatbotInput');
+    const answer = input.value.trim();
 
-// 🧠 Start conversation automatically
-document.addEventListener('DOMContentLoaded', async () => {
-    addMessage("👋 Hello admin! Checking for pending questions...");
+    if (!answer) return;
+    if (!currentQuestion) {
+        addMessage("❌ No question selected to answer.");
+        return;
+    }
+
+    addMessage(answer, true);
+    input.value = "";
 
     try {
-        const resp = await fetch(API_URL, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ message: 'Sorry, the admin is busy at the moment. Can you repeat your question?' })
+        const res = await fetch(SAVE_URL, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                question: currentQuestion,
+                answer: answer
+            })
         });
-        const data = await resp.json();
-        addMessage(data.reply);
-    } catch (e) {
-        addMessage("❌ Could not connect to admin bot (port 7000).");
-    }
 
-    // 🔄 Poll the server every 5 seconds for new questions
-    setInterval(async () => {
-        try {
-            const res = await fetch(POLL_URL);
-            const data = await res.json();
-            if (data.new) {
-                addMessage(`🆕 New question from customer:\n❓ ${data.question}`);
-            }
-        } catch (err) {
-            console.log("Polling error:", err);
+        const data = await res.json();
+
+        if (data.status === "success") {
+            addMessage("✅ Answer saved! Removed from pending.");
+            loadPending();
+        } else {
+            addMessage("❌ Error: " + data.message);
         }
-    }, 5000);
+
+    } catch (err) {
+        addMessage("❌ Connection error to admin backend.");
+    }
+}
+
+// Enter key sends
+document.getElementById('chatbotInput')
+    .addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendChatbotMessage();
+        }
+    });
+
+// Poll pending questions every 5 seconds
+setInterval(() => {
+    loadPending();
+}, 5000);
+
+// Initial load
+document.addEventListener('DOMContentLoaded', () => {
+    addMessage("👋 Checking for pending customer questions...");
+    loadPending();
 });
 </script>
 
