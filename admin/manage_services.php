@@ -128,7 +128,7 @@ table a:hover { color: var(--primary-red-dark); text-decoration: underline; }
 
 <!-- Navbar -->
 <nav class="navbar">
-    <div class="logo">Admin Panel</div>
+    <div class="logo">Papsi Paps Admin</div>
     <ul>
           <?php if ($_SESSION['role'] === 'superadmin'): ?>
         <li><a href="index.php">&#8592; Back</a></li>
