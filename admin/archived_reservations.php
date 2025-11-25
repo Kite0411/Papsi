@@ -88,7 +88,7 @@
     <nav class="navbar">
         <div class="logo"> Papsi Paps Admin</div>
     <ul>
-        <li><a href="archived_services.php" class="active">Archived Services</a></li>
+        <li><a href="archived_services.php" class="active">Archived Reservation</a></li>
         <li><a href="manage_reservations.php">Manage Reservations</a></li>
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
     </ul>
