@@ -387,20 +387,21 @@ def chat():
             )
             reply_parts.append(part)
 
-    if not faq_reply and not top_services:
+     if not faq_reply and not top_services:
         # Forward to admin
         saved = save_pending_question(user_message)
-        
-      if saved:
-    reply_parts.append(
-        "I've forwarded your question to our head mechanic. "
-        "He'll reply to you directly in this chat very soon!"
-    )
-else:
-    reply_parts.append(
-        "Your question is already with our mechanic. "
-        "You'll get his reply here shortly!"
-    )
+       
+        if saved:
+            reply_parts.append(
+                "I've forwarded your question to our head mechanic. "
+                "He'll reply to you directly in this chat very soon!"
+            )
+            print(f"FORWARDED TO ADMIN: {user_message}")
+        else:
+            reply_parts.append(
+                "Your question is already with our mechanic. "
+                "You'll get his reply here shortly!"
+            )
 
     reply = "\n\n".join(reply_parts)
     return jsonify({'reply': reply})
