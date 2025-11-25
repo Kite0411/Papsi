@@ -113,41 +113,43 @@
 </div>
 <script>
 /*
-  Frontend adapted for Flask backend at:
-  http://127.0.0.1:5000/chat
-  - Uses POST JSON { message }
-  - Expects JSON { reply }
-  - Includes timeout and better error handling
+  Enhanced Customer Chatbot with Real-time Admin Answers
 */
-const API_URL = '/chatbot/chat_proxy.php'; // must match your Flask address
+const API_URL = '/chatbot/chat_proxy.php';
+const STREAM_URL = 'https://papsi-chatbot-api.onrender.com/stream'; // SSE endpoint
 let chatbotMinimized = true;
 let isTyping = false;
 let welcomeShown = false;
+let eventSource = null;
+let pendingQuestionsMap = new Map(); // Track pending questions and their timestamps
+
+// ==================== CHAT UI FUNCTIONS ====================
 function toggleChatbot() {
     const chatbot = document.getElementById('chatbot');
     const toggle = document.getElementById('chatbotToggle');
     const body = document.getElementById('chatbotBody');
-    const status = document.getElementById('chatbotStatus'); // 🟢 green dot
-    const icon = document.getElementById('chatbotIcon'); // 💬 circle icon
+    const status = document.getElementById('chatbotStatus');
+    const icon = document.getElementById('chatbotIcon');
     chatbotMinimized = !chatbotMinimized;
    
     if (chatbotMinimized) {
         chatbot.classList.add('chatbot-minimized');
         toggle.textContent = '';
         body.style.display = 'none';
-        icon.style.display = 'flex'; // 💬 show circle icon
-        status.style.display = 'none'; // hide green dot
+        icon.style.display = 'flex';
+        status.style.display = 'none';
         toggle.setAttribute('aria-expanded', 'false');
     } else {
         chatbot.classList.remove('chatbot-minimized');
         toggle.textContent = '−';
         body.style.display = 'flex';
-        icon.style.display = 'none'; // hide circle icon
-        status.style.display = 'inline-block'; // show green dot again
+        icon.style.display = 'none';
+        status.style.display = 'inline-block';
         toggle.setAttribute('aria-expanded', 'true');
         document.getElementById('chatbotInput').focus();
     }
 }
+
 function showTyping() {
     if (isTyping) return;
     isTyping = true;
@@ -156,51 +158,73 @@ function showTyping() {
     typing.setAttribute('aria-hidden', 'false');
     scrollToBottom();
 }
+
 function hideTyping() {
     isTyping = false;
     const typing = document.getElementById('chatbotTyping');
     typing.style.display = 'none';
     typing.setAttribute('aria-hidden', 'true');
 }
-function addMessage(content, isUser = false) {
+
+function addMessage(content, isUser = false, isUpdate = false) {
     const messages = document.getElementById('chatbotMessages');
     const messageDiv = document.createElement('div');
-    messageDiv.className = `chatbot-message ${isUser ? 'message-user' : 'message-bot'}`;
-   
-    const avatar = document.createElement('div');
-    avatar.className = 'message-avatar';
-    avatar.textContent = isUser ? '👤' : '🔧';
-   
-    const messageContent = document.createElement('div');
-    messageContent.className = 'message-content';
-    messageContent.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
-   
-    messageDiv.appendChild(avatar);
-    messageDiv.appendChild(messageContent);
-   
+    
+    if (isUpdate) {
+        // Special styling for admin updates
+        messageDiv.className = 'chatbot-message message-update';
+        messageDiv.innerHTML = `
+            <div class="message-avatar">📢</div>
+            <div class="message-content" style="background: #e8f5e8; border-left: 4px solid #4CAF50;">
+                ${content}
+            </div>
+        `;
+    } else {
+        messageDiv.className = `chatbot-message ${isUser ? 'message-user' : 'message-bot'}`;
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = isUser ? '👤' : '🔧';
+        
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        messageContent.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+        
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(messageContent);
+    }
+
     // Remove welcome message if it exists
     const welcome = document.getElementById('chatbotWelcome');
     if (welcome) welcome.remove();
    
     messages.appendChild(messageDiv);
     scrollToBottom();
+    
+    // Auto-expand chatbot if minimized and receiving update
+    if (isUpdate && chatbotMinimized) {
+        toggleChatbot();
+    }
 }
-// simple escaping to avoid raw HTML injection
+
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>"']/g, function(m) {
         return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
     });
 }
+
 function scrollToBottom() {
     const messages = document.getElementById('chatbotMessages');
     setTimeout(() => messages.scrollTop = messages.scrollHeight, 80);
 }
+
 function askQuestion(question) {
     const input = document.getElementById('chatbotInput');
     input.value = question;
     sendChatbotMessage();
 }
+
+// ==================== ENHANCED MESSAGE SENDING ====================
 async function sendChatbotMessage() {
     const input = document.getElementById('chatbotInput');
     const sendBtn = document.getElementById('chatbotSend');
@@ -208,20 +232,15 @@ async function sendChatbotMessage() {
    
     if (!message || isTyping) return;
    
-    // Disable input and button
     input.disabled = true;
     sendBtn.disabled = true;
    
-    // Add user message
     addMessage(message, true);
     input.value = '';
-   
-    // Show typing indicator
     showTyping();
    
-    // Use AbortController to implement a timeout
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeout = setTimeout(() => controller.abort(), 15000);
    
     try {
         const resp = await fetch(API_URL, {
@@ -235,188 +254,250 @@ async function sendChatbotMessage() {
         clearTimeout(timeout);
        
         if (!resp.ok) {
-            // Try to read server error message if available
             let text = await resp.text().catch(()=>null);
             hideTyping();
             addMessage(`Sorry, server returned ${resp.status}. ${text ? 'Details: '+text : ''}`, false);
             return;
         }
        
-        // parse JSON safely
         const data = await resp.json().catch(() => null);
         hideTyping();
        
         if (data && data.reply) {
             addMessage(data.reply, false);
+            
+            // 🆕 Track if this question was forwarded to admin
+            if (data.reply.includes("forwarded your question") || 
+                data.reply.includes("I'm not sure") ||
+                data.reply.includes("I'll ask our")) {
+                trackPendingQuestion(message);
+            }
         } else {
             addMessage('Sorry, I encountered an unexpected response from the server.', false);
-            console.error('Unexpected server response:', data);
         }
        
     } catch (err) {
         hideTyping();
         if (err.name === 'AbortError') {
-            addMessage('Sorry, the request timed out. The model may be busy or the server is not responding.', false);
+            addMessage('Sorry, the request timed out. Please try again.', false);
         } else {
-            addMessage('Sorry, I\'m having trouble connecting to the chatbot server. Please try again in a moment', false);
-            console.error('Chatbot error:', err);
+            addMessage('Sorry, I\'m having trouble connecting. Please try again.', false);
         }
     } finally {
-        // Re-enable input and button
         input.disabled = false;
         sendBtn.disabled = false;
         input.focus();
     }
 }
-// keyboard support
+
+// ==================== REAL-TIME ADMIN ANSWER SYSTEM ====================
+function initializeSSE() {
+    try {
+        eventSource = new EventSource(STREAM_URL);
+        
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.message) {
+                    // 🆕 Enhanced notification with better formatting
+                    const formattedMessage = data.message
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br>');
+                    
+                    addMessage(formattedMessage, false, true);
+                    
+                    // Remove from pending tracking if this answers one of our questions
+                    removeFromPendingTracking(data.message);
+                }
+            } catch (e) {
+                console.log('SSE message parse error:', e);
+            }
+        };
+        
+        eventSource.onerror = function(err) {
+            console.log('SSE connection error, attempting reconnect...', err);
+            // Auto-reconnect after 5 seconds
+            setTimeout(() => {
+                if (eventSource) eventSource.close();
+                initializeSSE();
+            }, 5000);
+        };
+        
+        console.log('✅ Real-time updates enabled');
+    } catch (err) {
+        console.log('❌ SSE not supported, falling back to polling');
+        startPollingFallback();
+    }
+}
+
+// ==================== PENDING QUESTION TRACKING ====================
+function trackPendingQuestion(question) {
+    const timestamp = Date.now();
+    pendingQuestionsMap.set(question, timestamp);
+    
+    // Save to localStorage for persistence
+    savePendingQuestionsToStorage();
+    
+    console.log(`📝 Tracking pending question: "${question}"`);
+}
+
+function removeFromPendingTracking(message) {
+    // Check if this message answers any of our pending questions
+    for (const [question] of pendingQuestionsMap) {
+        if (message.includes(question)) {
+            pendingQuestionsMap.delete(question);
+            savePendingQuestionsToStorage();
+            console.log(`✅ Removed answered question: "${question}"`);
+            break;
+        }
+    }
+}
+
+function savePendingQuestionsToStorage() {
+    const questionsArray = Array.from(pendingQuestionsMap.entries());
+    localStorage.setItem('customer_pending_questions', JSON.stringify(questionsArray));
+}
+
+function loadPendingQuestionsFromStorage() {
+    try {
+        const stored = localStorage.getItem('customer_pending_questions');
+        if (stored) {
+            const questionsArray = JSON.parse(stored);
+            pendingQuestionsMap = new Map(questionsArray);
+        }
+    } catch (e) {
+        console.log('Error loading pending questions:', e);
+    }
+}
+
+// ==================== POLLING FALLBACK ====================
+function startPollingFallback() {
+    // Poll every 30 seconds for updates
+    setInterval(async () => {
+        if (pendingQuestionsMap.size === 0) return;
+        
+        for (const [question] of pendingQuestionsMap) {
+            try {
+                const resp = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: question })
+                });
+                
+                if (resp.ok) {
+                    const data = await resp.json();
+                    // Check if this question now has a proper answer (not the "forwarded" response)
+                    if (data.reply && 
+                        !data.reply.includes("forwarded your question") &&
+                        !data.reply.includes("I'm not sure") &&
+                        !data.reply.includes("I'll ask our")) {
+                        
+                        // Show the update
+                        addMessage(
+                            `✅ <strong>Update on your question:</strong> "${question}"<br><br>` +
+                            `<strong>Admin Response:</strong> ${data.reply}`, 
+                            false, 
+                            true
+                        );
+                        
+                        // Remove from tracking
+                        pendingQuestionsMap.delete(question);
+                        savePendingQuestionsToStorage();
+                    }
+                }
+            } catch (err) {
+                console.log('Polling error:', err);
+            }
+        }
+        
+        // Clean up old questions (older than 24 hours)
+        const now = Date.now();
+        const dayInMs = 24 * 60 * 60 * 1000;
+        for (const [question, timestamp] of pendingQuestionsMap) {
+            if (now - timestamp > dayInMs) {
+                pendingQuestionsMap.delete(question);
+            }
+        }
+        savePendingQuestionsToStorage();
+        
+    }, 30000); // Every 30 seconds
+}
+
+// ==================== EVENT LISTENERS ====================
 document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendChatbotMessage();
     }
 });
-// autofocus behavior
+
 document.getElementById('chatbotInput').addEventListener('focus', function() {
     if (chatbotMinimized) toggleChatbot();
 });
-// initial welcome message on page load (only once)
+
+// ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', function() {
+    // Load any pending questions from previous sessions
+    loadPendingQuestionsFromStorage();
+    
+    // Initialize real-time updates
+    initializeSSE();
+    
+    // Show welcome message
     setTimeout(() => {
         const messages = document.getElementById('chatbotMessages');
-        if (messages.children.length === 1 && welcomeShown) {
-            addMessage("Hi! I'm your vehicle diagnostic assistant. Describe your car problem and I'll recommend the right service for you!", false);
-            welcomeShown = false;
+        if (messages.children.length === 1) {
+            addMessage("Hi! I'm your vehicle diagnostic assistant. Describe your car problem and I'll recommend the right service! 🔧", false);
         }
-    }, 600);
-    // Start polling for answers to pending questions
-    startPollingForAnswers();
+    }, 1000);
 });
-// ==================== POLLING FOR ADMIN ANSWERS ====================
-let pollingInterval = null;
-let pendingQuestions = [];
-// Load pending questions from localStorage
-function loadPendingQuestions() {
-    const stored = localStorage.getItem('chatbot_pending_questions');
-    if (stored) {
-        try {
-            pendingQuestions = JSON.parse(stored);
-        } catch (e) {
-            pendingQuestions = [];
-        }
+
+// Add CSS for update messages
+const updateStyle = document.createElement('style');
+updateStyle.textContent = `
+/* Add to existing styles */
+.message-update {
+    justify-content: flex-start;
+    animation: pulse-gentle 2s ease-in-out;
+}
+
+.message-update .message-content {
+    background: #e8f5e8 !important;
+    border-left: 4px solid #4CAF50 !important;
+    border-radius: 12px;
+    padding: 12px 16px;
+    max-width: 90%;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.15);
+}
+
+@keyframes pulse-gentle {
+    0% { 
+        opacity: 0.7; 
+        transform: translateY(10px); 
+    }
+    100% { 
+        opacity: 1; 
+        transform: translateY(0); 
     }
 }
-// Save pending questions to localStorage
-function savePendingQuestions() {
-    localStorage.setItem('chatbot_pending_questions', JSON.stringify(pendingQuestions));
+
+/* Notification badge for minimized chatbot */
+.chatbot-icon::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    background: #ff4444;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    display: none;
 }
-// Add question to pending list
-function addPendingQuestion(question) {
-    loadPendingQuestions();
-    // Don't add duplicates
-    if (!pendingQuestions.find(q => q.question === question)) {
-        pendingQuestions.push({
-            question: question,
-            timestamp: Date.now()
-        });
-        savePendingQuestions();
-    }
+
+.chatbot-icon.has-notification::after {
+    display: block;
 }
-// Remove question from pending list
-function removePendingQuestion(question) {
-    loadPendingQuestions();
-    pendingQuestions = pendingQuestions.filter(q => q.question !== question);
-    savePendingQuestions();
-}
-// Check if a question now has an answer
-async function checkQuestionAnswered(question) {
-    try {
-        const resp = await fetch(API_URL, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: question })
-        });
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        // Check if response contains "I'm not sure" or "forwarded" (unanswered)
-        const isStillPending =
-            data.reply && (
-                data.reply.includes("I'm not sure") ||
-                data.reply.includes("forwarded your question") ||
-                data.reply.includes("I'll ask our")
-            );
-        if (!isStillPending && data.reply) {
-            return data.reply; // Got an answer!
-        }
-        return null; // Still pending
-    } catch (err) {
-        console.error('Error checking question:', err);
-        return null;
-    }
-}
-// Poll for answers every 30 seconds
-async function pollForAnswers() {
-    loadPendingQuestions();
-    if (pendingQuestions.length === 0) {
-        return; // Nothing to check
-    }
-    // Check each pending question
-    for (const item of pendingQuestions) {
-        const answer = await checkQuestionAnswered(item.question);
-        if (answer) {
-            // Got an answer! Show notification
-            addMessage(`✅ <strong>Update on your question:</strong> "${item.question}"`, false);
-            addMessage(answer, false);
-            // Remove from pending
-            removePendingQuestion(item.question);
-        }
-    }
-    // Clean up old pending questions (older than 24 hours)
-    const now = Date.now();
-    const dayAgo = 24 * 60 * 60 * 1000;
-    pendingQuestions = pendingQuestions.filter(q => (now - q.timestamp) < dayAgo);
-    savePendingQuestions();
-}
-// Start polling interval
-function startPollingForAnswers() {
-    // Poll every 30 seconds
-    pollingInterval = setInterval(pollForAnswers, 30000);
-    // Also poll once immediately after 5 seconds
-    setTimeout(pollForAnswers, 5000);
-}
-// Track when customer asks a question that gets "pending" response
-const originalAddMessage = addMessage;
-addMessage = function(content, isUser = false) {
-    // Call original function
-    originalAddMessage(content, isUser);
-    // If bot response contains "forwarded" or "not sure", track as pending
-    if (!isUser && content && (
-        content.includes("I'm not sure") ||
-        content.includes("forwarded your question") ||
-        content.includes("I'll ask our")
-    )) {
-        // Get the last user message from chat history
-        const messages = document.getElementById('chatbotMessages');
-        const userMessages = messages.querySelectorAll('.message-user .message-content');
-        if (userMessages.length > 0) {
-            const lastUserMessage = userMessages[userMessages.length - 1].textContent;
-            addPendingQuestion(lastUserMessage);
-        }
-    }
-};
-// Real-time updates (SSE) disabled for Render deployment
-// Render free tier doesn't maintain persistent connections well
-// Future: Consider using polling or WebSockets for real-time features
-/*
-const eventSource = new EventSource('http://127.0.0.1:5000/stream');
-eventSource.onmessage = function(event) {
-    const data = event.data;
-    if (data) {
-        addMessage(data.replace(/\n/g, '<br>'), false);
-    }
-};
-eventSource.onerror = function(err) {
-    console.error("SSE connection lost:", err);
-};
-*/
+`;
+document.head.appendChild(updateStyle);
 </script>
