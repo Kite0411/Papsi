@@ -1,6 +1,5 @@
 <?php
 // Admin Chatbot UI Component - AutoFix Admin Assistant
-// FIXED: Now connects to the correct Render API
 ?>
 <style>
 /* same styling, unchanged */
@@ -81,7 +80,7 @@
 </div>
 
 <script>
-// 🔥 FIXED: Use the SAME backend as customer bot
+// 🔥 CRITICAL FIX: Use the correct Render API URLs
 const API_URL = 'https://papsi-chatbot-api.onrender.com/admin_chat';
 const POLL_URL = 'https://papsi-chatbot-api.onrender.com/get_next_question';
 const PENDING_URL = 'https://papsi-chatbot-api.onrender.com/pending';
@@ -116,6 +115,11 @@ async function loadAllPending() {
     try {
         const res = await fetch(PENDING_URL);
         const pendingQuestions = await res.json();
+        
+        // DEBUG: Log what we received
+        console.log('📋 Pending API Response:', pendingQuestions);
+        console.log('📋 Is Array?', Array.isArray(pendingQuestions));
+        console.log('📋 Length:', pendingQuestions?.length);
 
         if (!Array.isArray(pendingQuestions) || pendingQuestions.length === 0) {
             listDiv.innerHTML = "<i style='color:#28a745'>✅ No pending questions.</i>";
@@ -233,8 +237,7 @@ setInterval(async () => {
 
 // Initial load on page ready
 document.addEventListener('DOMContentLoaded', async () => {
-    addMessage("👋 Admin panel initialized. Connecting to Render API...");
-    addMessage("🔗 API: https://papsi-chatbot-api.onrender.com");
+    addMessage("👋 Admin panel initialized. Loading pending questions...");
     
     await loadAllPending();
     
