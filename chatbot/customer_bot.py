@@ -45,8 +45,7 @@ if not PENDING_FILE.exists():
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
 
 # ---------- EMBEDDING MODEL ----------
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
+model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
 # ---------- SSE CLIENTS ----------
 clients = []
 
