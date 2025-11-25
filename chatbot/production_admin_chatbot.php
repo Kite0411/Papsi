@@ -1,7 +1,7 @@
-// 🔥 PRODUCTION CONFIGURATION - Admin-specific Render URL
-const RENDER_URL = 'https://papsi-admin-chatbot.onrender.com'; // Admin-specific URL
+// 🔥 FIXED: Now uses the SAME backend as customer bot
+const RENDER_URL = 'https://papsi-chatbot-api.onrender.com';
 
-// Use the unified bot endpoints (already in production_bot.py)
+// Use the unified bot endpoints (production_bot.py)
 const API_URL = `${RENDER_URL}/admin_chat`;
 const POLL_URL = `${RENDER_URL}/get_next_question`;
 const PENDING_URL = `${RENDER_URL}/pending`;
@@ -52,6 +52,9 @@ async function sendChatbotMessage() {
         });
         const data = await resp.json();
         addMessage(data.reply || "✅ Answer saved!");
+        
+        // Refresh pending list after saving
+        await loadPendingQuestions();
     } catch (e) {
         console.error('Admin chat error:', e);
         addMessage("❌ Connection error. Please check if the bot is running.");
@@ -83,12 +86,14 @@ async function loadPendingQuestions() {
         }
     } catch (e) {
         console.error('Failed to load pending questions:', e);
+        document.getElementById('pendingList').innerHTML = '<div style="color:#dc3545;font-size:13px;">⚠️ Error loading pending questions</div>';
     }
 }
 
 // 🧠 Start conversation automatically
 document.addEventListener('DOMContentLoaded', async () => {
-    addMessage("👋 Hello admin! Loading pending questions...");
+    addMessage("👋 Hello admin! Connecting to Render API...");
+    addMessage(`🔗 Backend: ${RENDER_URL}`);
     
     await loadPendingQuestions();
 
