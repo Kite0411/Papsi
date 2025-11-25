@@ -79,8 +79,8 @@
 </div>
 
 <script>
-const API_URL = 'http://127.0.0.1:7000/admin_chat';
-const POLL_URL = 'http://127.0.0.1:7000/get_next_question';
+const API_URL = 'https://papsi-admin-chatbot.onrender.com/save_answer';
+const POLL_URL = 'https://papsi-admin-chatbot.onrender.com/pending';
 let chatbotMinimized = false;
 
 function toggleChatbot() {
