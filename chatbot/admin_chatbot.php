@@ -1,5 +1,6 @@
 <?php
 // Admin Chatbot UI Component - AutoFix Admin Assistant
+// FIXED: Now connects to the correct Render API
 ?>
 <style>
 /* same styling, unchanged */
@@ -80,7 +81,7 @@
 </div>
 
 <script>
-// 🔥 CRITICAL FIX: Use the correct Render API URLs
+// 🔥 FIXED: Use the SAME backend as customer bot
 const API_URL = 'https://papsi-chatbot-api.onrender.com/admin_chat';
 const POLL_URL = 'https://papsi-chatbot-api.onrender.com/get_next_question';
 const PENDING_URL = 'https://papsi-chatbot-api.onrender.com/pending';
@@ -232,7 +233,8 @@ setInterval(async () => {
 
 // Initial load on page ready
 document.addEventListener('DOMContentLoaded', async () => {
-    addMessage("👋 Admin panel initialized. Loading pending questions...");
+    addMessage("👋 Admin panel initialized. Connecting to Render API...");
+    addMessage("🔗 API: https://papsi-chatbot-api.onrender.com");
     
     await loadAllPending();
     
