@@ -1,4 +1,4 @@
-        <?php
+<?php
         include '../includes/config.php';
         session_name("admin_session");
         session_start();
@@ -42,8 +42,16 @@
      if (isset($_GET['approve'])) {
     $id = intval($_GET['approve']);
     
-    // Fetch reservation to ensure it's pending verification
-    $stmt = $conn->prepare("SELECT * FROM reservations WHERE id = ? AND status = 'pending_verification'");
+    // Fetch reservation with customer info to get email
+    // Allow approval for pending_verification status or Walk-In method (not already approved/declined)
+    $stmt = $conn->prepare("
+        SELECT r.*, c.email AS customer_email, c.name AS customer_name
+        FROM reservations r
+        JOIN customers c ON r.customer_id = c.id
+        WHERE r.id = ? 
+        AND r.status NOT IN ('approved', 'declined')
+        AND (r.status = 'pending_verification' OR r.method = 'Walk-In')
+    ");
     $stmt->bind_param("i", $id);
     $stmt->execute();
     $res = $stmt->get_result()->fetch_assoc();
@@ -63,6 +71,41 @@
         if ($status_result['status'] === 'approved') {
             $desc = "Reservation #{$res['id']} for {$res['vehicle_make']} {$res['vehicle_model']} approved by admin '{$_SESSION['username']}'";
             logAudit('RESERVATION_APPROVED', $desc, $_SESSION['user_id'], $_SESSION['username']);
+            
+            // Send email notification to customer
+            if (function_exists('sendEmail') && !empty($res['customer_email'])) {
+                $to = $res['customer_email'];
+                $name = htmlspecialchars($res['customer_name']);
+                $date = htmlspecialchars($res['reservation_date']);
+                $time = htmlspecialchars(date("g:i A", strtotime($res['reservation_time'])));
+                $vehicle = htmlspecialchars($res['vehicle_make'] . ' ' . $res['vehicle_model'] . ' (' . $res['vehicle_year'] . ')');
+                $subject = "Reservation Approved - Auto Repair Center";
+                $body_html = "
+                    <p>Dear <b>$name</b>,</p>
+                    <p>Your reservation has been <b>approved</b>!</p>
+                    <p><b>Reservation Details:</b></p>
+                    <ul>
+                        <li><b>Vehicle:</b> $vehicle</li>
+                        <li><b>Date:</b> $date</li>
+                        <li><b>Time:</b> $time</li>
+                    </ul>
+                    <p>We look forward to serving you on your scheduled date and time.</p>
+                    <p>Thank you,<br><b>AutoRepair Center</b></p>
+                ";
+                $body_text = "Dear $name,\n\nYour reservation has been approved!\n\nReservation Details:\n- Vehicle: $vehicle\n- Date: $date\n- Time: $time\n\nWe look forward to serving you on your scheduled date and time.\n\nThank you,\nAutoRepair Center";
+
+                list($sent, $err) = sendEmail($to, $subject, $body_html, $body_text);
+                if (!$sent) {
+                    error_log("Failed to send reservation approval email to $to: $err");
+                }
+            } else {
+                if (empty($res['customer_email'])) {
+                    error_log("Customer email not found for reservation #{$res['id']}");
+                } else {
+                    error_log("sendEmail() function not found — unable to notify customer.");
+                }
+            }
+            
             $_SESSION['notif'] = ['message' => 'Reservation approved successfully!', 'type' => 'success'];
         }
     }
