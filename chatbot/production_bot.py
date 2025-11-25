@@ -1,6 +1,7 @@
 """
 Papsi Repair Shop - Unified Chatbot API
 OPTIMIZED FOR RENDER FREE TIER - No Timeouts!
+FIXED: Pending questions now properly sync between customer and admin
 """
 
 from flask import Flask, request, jsonify, Response
@@ -55,18 +56,21 @@ def resolve_data_file(env_var, default_name):
 FAQ_FILE = resolve_data_file('FAQ_FILE_PATH', 'faq.csv')
 PENDING_FILE = resolve_data_file('PENDING_FILE_PATH', 'pending_questions.csv')
 
-# Initialize CSV files
+# Initialize CSV files with proper headers
 FAQ_FILE.parent.mkdir(parents=True, exist_ok=True)
 PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 if not FAQ_FILE.exists():
     pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
+    
 if not PENDING_FILE.exists():
+    # CRITICAL: Initialize with 'question' column only
     pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
 
-# ==================== AI MODEL - LAZY LOADING ====================
-# Model loads IN BACKGROUND to avoid blocking startup
+print(f"📁 FAQ File: {FAQ_FILE}")
+print(f"📁 Pending File: {PENDING_FILE}")
 
+# ==================== AI MODEL - LAZY LOADING ====================
 model = None
 model_loading = False
 model_loaded = False
@@ -259,6 +263,73 @@ def is_info_only_request(user_message):
     text = user_message.lower()
     return any(keyword in text for keyword in INFO_ONLY_KEYWORDS)
 
+# ==================== PENDING QUESTIONS HELPERS ====================
+
+def save_pending_question(question):
+    """Save a question to pending list - FIXED VERSION"""
+    try:
+        # Read existing pending questions
+        if PENDING_FILE.exists():
+            pending = pd.read_csv(PENDING_FILE)
+        else:
+            pending = pd.DataFrame(columns=['question'])
+        
+        # Clean up the dataframe - remove any malformed rows
+        pending = pending.dropna(subset=['question'])
+        pending = pending[pending['question'].str.strip() != '']
+        
+        # Check if question already exists
+        if question in pending['question'].values:
+            print(f"⏭️ Question already pending: {question}")
+            return False
+        
+        # Add new question
+        new_row = pd.DataFrame({'question': [question]})
+        pending = pd.concat([pending, new_row], ignore_index=True)
+        
+        # Save back to CSV
+        pending.to_csv(PENDING_FILE, index=False)
+        print(f"✅ Saved pending question: {question}")
+        return True
+        
+    except Exception as e:
+        print(f"⚠️ Error saving pending question: {e}")
+        return False
+
+def get_pending_questions():
+    """Get all pending questions - FIXED VERSION"""
+    try:
+        if not PENDING_FILE.exists():
+            return []
+        
+        pending = pd.read_csv(PENDING_FILE)
+        
+        # Clean up - remove empty or malformed rows
+        pending = pending.dropna(subset=['question'])
+        pending = pending[pending['question'].str.strip() != '']
+        
+        questions = pending['question'].tolist()
+        print(f"📋 Retrieved {len(questions)} pending questions")
+        return questions
+        
+    except Exception as e:
+        print(f"⚠️ Error reading pending questions: {e}")
+        return []
+
+def remove_pending_question(question):
+    """Remove a question from pending list"""
+    try:
+        if not PENDING_FILE.exists():
+            return
+        
+        pending = pd.read_csv(PENDING_FILE)
+        pending = pending[pending['question'] != question]
+        pending.to_csv(PENDING_FILE, index=False)
+        print(f"🗑️ Removed from pending: {question}")
+        
+    except Exception as e:
+        print(f"⚠️ Error removing pending question: {e}")
+
 # ==================== HEALTH CHECK (INSTANT RESPONSE) ====================
 
 @app.route('/health', methods=['GET'])
@@ -295,15 +366,13 @@ def chat():
     # ---------- 1️⃣ Check FAQ ----------
     try:
         faq_data = pd.read_csv(FAQ_FILE)
-        # Remove empty rows and the header row if it appears as data
         faq_data = faq_data.dropna(subset=['question', 'answer'])
         faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_data = faq_data[faq_data['question'] != 'question']  # Remove header if present
+        faq_data = faq_data[faq_data['question'] != 'question']
         faq_reply = None
         
         if model_loaded:
             faq_reply, score = semantic_search_faq(user_message, faq_data)
-            print(f"🔍 FAQ Search - Score: {score:.3f}, Match: {faq_reply is not None}")
         else:
             # Fallback: exact or partial string matching
             if len(faq_data) > 0:
@@ -312,11 +381,9 @@ def chat():
                     msg = user_message.lower()
                     if msg in q or q in msg:
                         faq_reply = row['answer']
-                        print(f"🔍 FAQ Fallback Match: {row['question']}")
                         break
     except Exception as e:
         print(f"⚠️ Error reading FAQ: {e}")
-        faq_data = pd.DataFrame()
         faq_reply = None
 
     # ---------- 2️⃣ Check Services ----------
@@ -326,7 +393,6 @@ def chat():
     if model_loaded:
         top_services = semantic_search_services(user_message, services)
     else:
-        # Fallback: keyword matching
         top_services = keyword_search_services(user_message, services)
 
     # ---------- 3️⃣ Build Reply ----------
@@ -345,17 +411,20 @@ def chat():
             reply_parts.append(part)
 
     if not faq_reply and not top_services:
-        # Forward to Admin
-        pending = pd.read_csv(PENDING_FILE)
-        if user_message not in pending['question'].values:
-            new_row = pd.DataFrame({'question': [user_message]})
-            pending = pd.concat([pending, new_row], ignore_index=True)
-            pending.to_csv(PENDING_FILE, index=False)
-
-        reply_parts.append(
-            "🤖 I'm not sure about that yet. I've forwarded your question to our admin for review. "
-            "You'll be updated here once the admin provides an answer."
-        )
+        # Forward to Admin - FIXED VERSION
+        saved = save_pending_question(user_message)
+        
+        if saved:
+            reply_parts.append(
+                "🤖 I'm not sure about that yet. I've forwarded your question to our admin for review. "
+                "You'll be updated here once the admin provides an answer."
+            )
+            print(f"📤 Forwarded to admin: {user_message}")
+        else:
+            reply_parts.append(
+                "🤖 I'm not sure about that. Your question is already being reviewed by our admin. "
+                "You'll be updated soon!"
+            )
 
     reply = "\n\n".join(reply_parts)
     return jsonify({'reply': reply})
@@ -364,17 +433,25 @@ def chat():
 
 current_question = None
 
+@app.route('/pending', methods=['GET'])
+def get_pending():
+    """Get all pending questions - FIXED VERSION"""
+    questions = get_pending_questions()
+    return jsonify(questions)
+
 @app.route('/get_next_question', methods=['GET'])
 def get_next_question():
     """Check for new pending questions"""
     global current_question
     
-    pending = pd.read_csv(PENDING_FILE)
-    if pending.empty:
+    questions = get_pending_questions()
+    
+    if not questions:
+        current_question = None
         return jsonify({'new': False})
 
     if current_question is None:
-        current_question = pending.iloc[0]['question']
+        current_question = questions[0]
         return jsonify({'new': True, 'question': current_question})
 
     return jsonify({'new': False})
@@ -390,37 +467,39 @@ def admin_chat():
         return jsonify({'reply': 'Please type something.'})
 
     if current_question is None:
-        pending = pd.read_csv(PENDING_FILE)
-        if pending.empty:
+        questions = get_pending_questions()
+        if not questions:
             return jsonify({'reply': '✅ No pending questions right now.'})
-        current_question = pending.iloc[0]['question']
+        current_question = questions[0]
         return jsonify({'reply': f"❓ {current_question}\n\nPlease provide your answer:"})
 
     # Save answer
     question = current_question
     answer = message
 
-    faq = pd.read_csv(FAQ_FILE)
-    faq = faq.drop_duplicates(subset=['question'], keep='last')
-    faq = faq[faq['question'] != question]
-    new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
-    faq = pd.concat([faq, new_row], ignore_index=True)
-    faq.to_csv(FAQ_FILE, index=False)
+    try:
+        faq = pd.read_csv(FAQ_FILE)
+        faq = faq.drop_duplicates(subset=['question'], keep='last')
+        faq = faq[faq['question'] != question]
+        new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
+        faq = pd.concat([faq, new_row], ignore_index=True)
+        faq.to_csv(FAQ_FILE, index=False)
+        print(f"✅ Saved to FAQ: {question} -> {answer}")
+    except Exception as e:
+        print(f"⚠️ Error saving to FAQ: {e}")
 
     # Remove from pending
-    pending = pd.read_csv(PENDING_FILE)
-    pending = pending[pending['question'] != question]
-    pending.to_csv(PENDING_FILE, index=False)
+    remove_pending_question(question)
 
-    print(f"✅ Saved to FAQ: {question} -> {answer}")
+    # Notify customers
     send_sse_message(f"✅ Update from admin: {answer}")
 
     # Check for next question
     current_question = None
-    pending = pd.read_csv(PENDING_FILE)
+    questions = get_pending_questions()
 
-    if not pending.empty:
-        next_q = pending.iloc[0]['question']
+    if questions:
+        next_q = questions[0]
         current_question = next_q
         reply = f"✅ Answer saved!\n\nNext question:\n❓ {next_q}\nPlease provide your answer:"
     else:
@@ -438,12 +517,15 @@ def notify_customer():
     if not question or not answer:
         return jsonify({"reply": "Invalid data"}), 400
 
-    faq = pd.read_csv(FAQ_FILE)
-    new_entry = pd.DataFrame({'question': [question], 'answer': [answer]})
-    faq = pd.concat([faq, new_entry], ignore_index=True)
-    faq.to_csv(FAQ_FILE, index=False)
+    try:
+        faq = pd.read_csv(FAQ_FILE)
+        new_entry = pd.DataFrame({'question': [question], 'answer': [answer]})
+        faq = pd.concat([faq, new_entry], ignore_index=True)
+        faq.to_csv(FAQ_FILE, index=False)
+        send_sse_message(f"✅ Update from admin: {answer}")
+    except Exception as e:
+        print(f"⚠️ Error in notify_customer: {e}")
 
-    send_sse_message(f"✅ Update from admin: {answer}")
     return jsonify({"reply": "Customer notified."})
 
 @app.route('/stream')
@@ -458,17 +540,6 @@ def stream():
             yield f"data: {msg}\n\n"
     
     return Response(event_stream(q), mimetype="text/event-stream")
-
-@app.route('/pending', methods=['GET'])
-def get_pending():
-    """Get all pending questions"""
-    try:
-        pending = pd.read_csv(PENDING_FILE)
-        questions = pending['question'].tolist()
-        return jsonify(questions)
-    except Exception as e:
-        print(f"⚠️ Error: {e}")
-        return jsonify([])
 
 # ==================== RUN ====================
 
