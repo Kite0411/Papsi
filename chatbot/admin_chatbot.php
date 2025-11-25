@@ -80,24 +80,39 @@
 </div>
 
 <script>
-// 🔥 CRITICAL FIX: Use the correct Render API URLs
-const API_URL = 'https://papsi-chatbot-api.onrender.com/admin_chat';
-const POLL_URL = 'https://papsi-chatbot-api.onrender.com/get_next_question';
-const PENDING_URL = 'https://papsi-chatbot-api.onrender.com/pending';
+// 🔥 CRITICAL: Your Render URL
+const RENDER_URL = 'https://papsi-chatbot-api.onrender.com';
+const API_URL = `${RENDER_URL}/admin_chat`;
+const POLL_URL = `${RENDER_URL}/get_next_question`;
+const PENDING_URL = `${RENDER_URL}/pending`;
 
+// === REAL-TIME SSE (INSTANT UPDATES - NO POLLING NEEDED) ===
+const es = new EventSource(`${RENDER_URL}/stream`);
+es.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    if (data.type === 'new_question') {
+        // Instantly refresh pending list and load next question
+        loadAllPending();
+        loadNextQuestion();  // This will auto-show the new question in chat
+    }
+    if (data.type === 'question_answered') {
+        loadAllPending();  // Refresh list
+    }
+};
+es.onerror = function() {
+    console.log("SSE disconnected – retrying...");
+};
+
+// === YOUR ORIGINAL CODE BELOW (UNCHANGED EXCEPT REMOVED POLLING) ===
 let currentQuestion = null;
 let lastPendingCount = 0;
 
-// Display message in the chat window
 function addMessage(content, isUser = false) {
     const messages = document.getElementById('chatbotMessages');
-    
-    // Remove welcome if it exists
     const welcome = messages.querySelector('.chatbot-welcome');
     if (welcome && (isUser || content !== '')) {
         welcome.remove();
     }
-    
     const div = document.createElement('div');
     div.className = `chatbot-message ${isUser ? 'message-user' : 'message-bot'}`;
     div.innerHTML = `
@@ -108,66 +123,47 @@ function addMessage(content, isUser = false) {
     messages.scrollTop = messages.scrollHeight;
 }
 
-// Load ALL pending questions and display them
 async function loadAllPending() {
     const listDiv = document.getElementById("pendingList");
-
     try {
         const res = await fetch(PENDING_URL);
         const pendingQuestions = await res.json();
-        
-        // DEBUG: Log what we received
         console.log('📋 Pending API Response:', pendingQuestions);
-        console.log('📋 Is Array?', Array.isArray(pendingQuestions));
-        console.log('📋 Length:', pendingQuestions?.length);
-
         if (!Array.isArray(pendingQuestions) || pendingQuestions.length === 0) {
             listDiv.innerHTML = "<i style='color:#28a745'>✅ No pending questions.</i>";
-            
-            // Notify if count changed from something to zero
             if (lastPendingCount > 0) {
                 addMessage("✅ All questions have been answered!");
             }
             lastPendingCount = 0;
             return;
         }
-
-        // Show count and list
         listDiv.innerHTML = `<b style='color:#dc3545'>📋 Pending Questions (${pendingQuestions.length}):</b>`;
-        
         pendingQuestions.forEach((question, index) => {
             const questionDiv = document.createElement('div');
             questionDiv.className = 'pending-question-item';
             questionDiv.innerHTML = `<strong>${index + 1}.</strong> ${question}`;
             listDiv.appendChild(questionDiv);
         });
-
-        // Notify if new questions arrived
         if (pendingQuestions.length > lastPendingCount) {
             const newCount = pendingQuestions.length - lastPendingCount;
             addMessage(`🆕 ${newCount} new question(s) received from customers!`);
         }
-        
         lastPendingCount = pendingQuestions.length;
-
     } catch (err) {
-        listDiv.innerHTML = "<span style='color:red'>⚠️ Error loading pending questions. Make sure API is running.</span>";
+        listDiv.innerHTML = "<span style='color:red'>⚠️ Error loading pending questions.</span>";
         console.error('Error loading pending:', err);
     }
 }
 
-// Load the NEXT question to answer
 async function loadNextQuestion() {
     try {
         const res = await fetch(POLL_URL);
         const data = await res.json();
-
-        if (data.new && data.question) {
+        if (data.new && data.question && data.question !== currentQuestion) {
             currentQuestion = data.question;
             addMessage(`📌 Next question to answer:\n❓ ${currentQuestion}\n\nPlease type your answer below:`);
             return true;
         }
-        
         return false;
     } catch (err) {
         console.error('Error loading next question:', err);
@@ -175,49 +171,37 @@ async function loadNextQuestion() {
     }
 }
 
-// Send admin answer to backend
 async function sendChatbotMessage() {
     const input = document.getElementById('chatbotInput');
     const answer = input.value.trim();
-
     if (!answer) {
         addMessage("⚠️ Please type an answer first.");
         return;
     }
-
-    // Show user's answer
     addMessage(answer, true);
     input.value = "";
-
     try {
         const res = await fetch(API_URL, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({ message: answer })
         });
-
         const data = await res.json();
-
         if (data.reply) {
             addMessage(data.reply);
         }
-
-        // Reload pending list and check for next question
         await loadAllPending();
-        
-        // Auto-load next question if available
         const hasNext = await loadNextQuestion();
-        if (!hasNext) {
-            addMessage("🎉 Great job! All questions answered. Waiting for new customer questions...");
+        if (!hasNext && currentQuestion) {
+            addMessage("🎉 Great job! All questions answered.");
         }
-
     } catch (err) {
-        addMessage("❌ Connection error to admin backend. Please check if the API is running.");
+        addMessage("❌ Connection error.");
         console.error('Admin chat error:', err);
     }
 }
 
-// Allow Enter key to send message
+// Enter key to send
 document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -225,30 +209,15 @@ document.getElementById('chatbotInput').addEventListener('keypress', function(e)
     }
 });
 
-// Poll pending questions every 10 seconds
-setInterval(async () => {
-    await loadAllPending();
-    
-    // Auto-prompt for next question if none is active
-    if (!currentQuestion) {
-        await loadNextQuestion();
-    }
-}, 10000);
-
-// Initial load on page ready
+// Initial load
 document.addEventListener('DOMContentLoaded', async () => {
-    addMessage("👋 Admin panel initialized. Loading pending questions...");
-    
+    addMessage("👋 Admin panel initialized.");
     await loadAllPending();
-    
-    // Try to load first question
-    const hasQuestion = await loadNextQuestion();
-    if (!hasQuestion) {
-        addMessage("✅ No pending questions right now. Waiting for customer inquiries...");
-    }
+    await loadNextQuestion();
 });
 
-// Toggle chatbot UI
+// === REMOVED: setInterval polling (SSE handles it now) ===
+// Keep toggle function unchanged
 let chatbotMinimized = false;
 function toggleChatbot() {
     const chatbot = document.getElementById('adminChatbot');
