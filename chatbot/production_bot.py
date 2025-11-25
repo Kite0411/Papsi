@@ -68,10 +68,18 @@ model = None
 model_loading = False
 model_loaded = False
 
+# Force disable model for Render free tier
+USE_AI_MODEL = os.environ.get('USE_AI_MODEL', 'false').lower() == 'true'
+
 def load_model_background():
     global model, model_loading, model_loaded
-    if model_loaded or model_loading:
+    
+    if not USE_AI_MODEL:
+        print("⚠️ AI model disabled - using keyword matching only")
+        model_loaded = False
         return
+        
+    # ... rest of code
     model_loading = True
     print("🤖 Loading AI model...")
     try:
