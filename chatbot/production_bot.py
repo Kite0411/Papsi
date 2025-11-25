@@ -76,7 +76,7 @@ def load_model_background():
     print("🤖 Loading AI model...")
     try:
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('paraphrase-MiniLM-L3-v2')
+        model = SentenceTransformer('all-MiniLM-L6-v2')  
         model_loaded = True
         print("✅ AI model loaded")
     except Exception as e:
@@ -85,7 +85,11 @@ def load_model_background():
     finally:
         model_loading = False
 
+# REMOVE THIS:
 threading.Thread(target=load_model_background, daemon=True).start()
+
+# REPLACE WITH THIS:
+load_model_background()  # Load synchronously on startup
 
 # ==================== SSE ====================
 clients = []
