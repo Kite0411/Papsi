@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Configure CORS for Hostinger frontend
 CORS(app, resources={
     r"/*": {
-        "origins": os.environ.get("CORS_ORIGINS", "https://blueviolet-seahorse-808517.hostingersite.com").split(","),
+        "origins": os.environ.get("CORS_ORIGINS", "goldenrod-quetzal-768639.hostingersite.com").split(","),
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
