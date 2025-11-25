@@ -1,6 +1,8 @@
 """
-Papsi Repair Shop - Unified Chatbot API
-CRITICAL FIX: Pending questions now properly save and retrieve
+Papsi Repair Shop - FIXED Unified Chatbot API
+✅ Fixed pending questions sync
+✅ Fixed admin-customer communication
+✅ Better error handling
 """
 
 from flask import Flask, request, jsonify, Response
@@ -13,6 +15,8 @@ import threading
 from pathlib import Path
 from dotenv import load_dotenv
 import json
+import time
+from filelock import FileLock
 
 load_dotenv()
 app = Flask(__name__)
@@ -58,10 +62,14 @@ if not FAQ_FILE.exists():
     pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
     
 if not PENDING_FILE.exists():
-    pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
+    pd.DataFrame(columns=['question', 'timestamp']).to_csv(PENDING_FILE, index=False)
 
 print(f"📁 FAQ File: {FAQ_FILE}")
 print(f"📁 Pending File: {PENDING_FILE}")
+
+# File locks for thread-safe operations
+FAQ_LOCK = FileLock(str(FAQ_FILE) + ".lock")
+PENDING_LOCK = FileLock(str(PENDING_FILE) + ".lock")
 
 # ==================== AI MODEL ====================
 model = None
@@ -87,14 +95,20 @@ def load_model_background():
 
 threading.Thread(target=load_model_background, daemon=True).start()
 
-# ==================== SSE ====================
+# ==================== SSE FOR REAL-TIME UPDATES ====================
 clients = []
 
 def send_sse_message(data):
+    """Send real-time updates to all connected clients"""
+    dead_clients = []
     for q in clients[:]:
         try:
             q.put(data, timeout=0.2)
         except Exception:
+            dead_clients.append(q)
+    
+    for q in dead_clients:
+        if q in clients:
             clients.remove(q)
 
 # ==================== DATABASE ====================
@@ -188,48 +202,56 @@ def keyword_search_services(user_message, services):
     matches.sort(key=lambda x: x[1], reverse=True)
     return matches[:3]
 
-# ==================== PENDING QUESTIONS - CRITICAL FIX ====================
+# ==================== PENDING QUESTIONS - FIXED ====================
 
 def save_pending_question(question):
-    """Save pending question - THREAD-SAFE VERSION"""
+    """Save pending question - THREAD-SAFE with file locking"""
     try:
-        # Read current state
-        if PENDING_FILE.exists():
-            try:
-                pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
-            except:
-                pending = pd.DataFrame(columns=['question'])
-        else:
-            pending = pd.DataFrame(columns=['question'])
-        
-        # Clean up
-        pending = pending.dropna(subset=['question'])
-        pending['question'] = pending['question'].str.strip()
-        pending = pending[pending['question'] != '']
-        pending = pending[pending['question'] != 'question']  # Remove header if present
-        
-        # Check duplicate
-        question_clean = question.strip()
-        if question_clean in pending['question'].values:
-            print(f"⏭️ Already pending: {question_clean}")
-            return False
-        
-        # Add new
-        new_row = pd.DataFrame({'question': [question_clean]})
-        pending = pd.concat([pending, new_row], ignore_index=True)
-        
-        # Save atomically
-        pending.to_csv(PENDING_FILE, index=False, encoding='utf-8')
-        
-        print(f"✅ SAVED TO PENDING: {question_clean}")
-        print(f"📊 Total pending: {len(pending)}")
-        
-        # Verify immediately
-        verify = pd.read_csv(PENDING_FILE, dtype={'question': str})
-        print(f"🔍 VERIFY: File now has {len(verify)} rows")
-        
-        return True
-        
+        with PENDING_LOCK:
+            # Read current state
+            if PENDING_FILE.exists():
+                try:
+                    pending = pd.read_csv(PENDING_FILE, dtype={'question': str, 'timestamp': str})
+                except:
+                    pending = pd.DataFrame(columns=['question', 'timestamp'])
+            else:
+                pending = pd.DataFrame(columns=['question', 'timestamp'])
+            
+            # Clean up
+            pending = pending.dropna(subset=['question'])
+            pending['question'] = pending['question'].str.strip()
+            pending = pending[pending['question'] != '']
+            pending = pending[pending['question'] != 'question']
+            
+            # Check duplicate
+            question_clean = question.strip()
+            if question_clean in pending['question'].values:
+                print(f"⭐️ Already pending: {question_clean}")
+                return False
+            
+            # Add new with timestamp
+            timestamp = str(int(time.time()))
+            new_row = pd.DataFrame({
+                'question': [question_clean],
+                'timestamp': [timestamp]
+            })
+            pending = pd.concat([pending, new_row], ignore_index=True)
+            
+            # Save atomically
+            pending.to_csv(PENDING_FILE, index=False, encoding='utf-8')
+            
+            print(f"✅ SAVED TO PENDING: {question_clean}")
+            print(f"📊 Total pending: {len(pending)}")
+            
+            # Notify admin via SSE
+            send_sse_message(json.dumps({
+                'type': 'new_question',
+                'question': question_clean,
+                'timestamp': timestamp
+            }))
+            
+            return True
+            
     except Exception as e:
         print(f"⚠️ ERROR saving pending: {e}")
         import traceback
@@ -237,35 +259,31 @@ def save_pending_question(question):
         return False
 
 def get_pending_questions():
-    """Get all pending questions - DEBUG VERSION"""
+    """Get all pending questions - THREAD-SAFE"""
     try:
-        print(f"📂 Reading from: {PENDING_FILE}")
-        print(f"📂 File exists: {PENDING_FILE.exists()}")
-        
-        if not PENDING_FILE.exists():
-            print("⚠️ File doesn't exist!")
-            return []
-        
-        # Read with explicit dtype
-        pending = pd.read_csv(PENDING_FILE, dtype={'question': str}, keep_default_na=False)
-        
-        print(f"📊 RAW CSV:")
-        print(pending.to_string())
-        print(f"📊 Columns: {pending.columns.tolist()}")
-        print(f"📊 Shape: {pending.shape}")
-        
-        # Clean
-        pending = pending.dropna(subset=['question'])
-        pending['question'] = pending['question'].str.strip()
-        pending = pending[pending['question'] != '']
-        pending = pending[pending['question'] != 'question']
-        
-        questions = pending['question'].tolist()
-        
-        print(f"📋 RETURNING {len(questions)} questions: {questions}")
-        
-        return questions
-        
+        with PENDING_LOCK:
+            if not PENDING_FILE.exists():
+                return []
+            
+            pending = pd.read_csv(PENDING_FILE, dtype={'question': str, 'timestamp': str}, keep_default_na=False)
+            
+            # Clean
+            pending = pending.dropna(subset=['question'])
+            pending['question'] = pending['question'].str.strip()
+            pending = pending[pending['question'] != '']
+            pending = pending[pending['question'] != 'question']
+            
+            # Sort by timestamp (oldest first)
+            if 'timestamp' in pending.columns:
+                pending['timestamp'] = pd.to_numeric(pending['timestamp'], errors='coerce')
+                pending = pending.sort_values('timestamp')
+            
+            questions = pending['question'].tolist()
+            
+            print(f"📋 RETURNING {len(questions)} questions")
+            
+            return questions
+            
     except Exception as e:
         print(f"⚠️ ERROR reading pending: {e}")
         import traceback
@@ -273,14 +291,22 @@ def get_pending_questions():
         return []
 
 def remove_pending_question(question):
-    """Remove question from pending"""
+    """Remove question from pending - THREAD-SAFE"""
     try:
-        if not PENDING_FILE.exists():
-            return
-        pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
-        pending = pending[pending['question'] != question]
-        pending.to_csv(PENDING_FILE, index=False)
-        print(f"🗑️ Removed: {question}")
+        with PENDING_LOCK:
+            if not PENDING_FILE.exists():
+                return
+            pending = pd.read_csv(PENDING_FILE, dtype={'question': str, 'timestamp': str})
+            pending = pending[pending['question'] != question]
+            pending.to_csv(PENDING_FILE, index=False)
+            print(f"🗑️ Removed: {question}")
+            
+            # Notify all clients
+            send_sse_message(json.dumps({
+                'type': 'question_answered',
+                'question': question
+            }))
+            
     except Exception as e:
         print(f"⚠️ Remove error: {e}")
 
@@ -290,7 +316,8 @@ def remove_pending_question(question):
 def health():
     return jsonify({
         "status": "healthy",
-        "model_status": "loaded" if model_loaded else ("loading" if model_loading else "not_loaded")
+        "model_status": "loaded" if model_loaded else ("loading" if model_loading else "not_loaded"),
+        "pending_count": len(get_pending_questions())
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -298,7 +325,8 @@ def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
         "status": "running",
-        "model_ready": model_loaded
+        "model_ready": model_loaded,
+        "pending_questions": len(get_pending_questions())
     }), 200
 
 @app.route('/chat', methods=['POST'])
@@ -312,11 +340,13 @@ def chat():
 
     reply_parts = []
     
-    # Check FAQ
+    # Check FAQ first
     try:
-        faq_data = pd.read_csv(FAQ_FILE)
-        faq_data = faq_data.dropna(subset=['question', 'answer'])
-        faq_data = faq_data[faq_data['question'].str.strip() != '']
+        with FAQ_LOCK:
+            faq_data = pd.read_csv(FAQ_FILE)
+            faq_data = faq_data.dropna(subset=['question', 'answer'])
+            faq_data = faq_data[faq_data['question'].str.strip() != '']
+        
         faq_reply = None
         
         if model_loaded:
@@ -364,7 +394,7 @@ def chat():
         if saved:
             reply_parts.append(
                 "🤖 I'm not sure about that yet. I've forwarded your question to our admin. "
-                "You'll be updated soon!"
+                "You'll be updated soon! Check back in a few minutes."
             )
             print(f"📤 FORWARDED TO ADMIN: {user_message}")
         else:
@@ -379,19 +409,12 @@ def chat():
 # ==================== ADMIN ENDPOINTS ====================
 
 current_question = None
+question_lock = threading.Lock()
 
 @app.route('/pending', methods=['GET'])
 def get_pending():
-    """Get all pending questions - WITH DEBUG"""
-    print("\n" + "="*50)
-    print("🌐 /pending endpoint called")
-    
+    """Get all pending questions"""
     questions = get_pending_questions()
-    
-    print(f"🌐 Returning to client: {questions}")
-    print(f"🌐 JSON length: {len(json.dumps(questions))}")
-    print("="*50 + "\n")
-    
     return jsonify(questions)
 
 @app.route('/get_next_question', methods=['GET'])
@@ -399,99 +422,96 @@ def get_next_question():
     """Check for new pending questions"""
     global current_question
     
-    questions = get_pending_questions()
-    
-    if not questions:
-        current_question = None
-        return jsonify({'new': False})
+    with question_lock:
+        questions = get_pending_questions()
+        
+        if not questions:
+            current_question = None
+            return jsonify({'new': False})
 
-    if current_question is None:
-        current_question = questions[0]
-        return jsonify({'new': True, 'question': current_question})
+        if current_question is None or current_question not in questions:
+            current_question = questions[0]
+            return jsonify({'new': True, 'question': current_question})
 
-    return jsonify({'new': False})
+        return jsonify({'new': False, 'question': current_question})
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
-    """Admin chatbot endpoint"""
+    """Admin chatbot endpoint - FIXED"""
     global current_question
+    
     data = request.get_json()
     message = data.get('message', '').strip()
 
     if not message:
         return jsonify({'reply': 'Please type something.'})
 
-    if current_question is None:
+    with question_lock:
+        # If no current question, load next one
+        if current_question is None:
+            questions = get_pending_questions()
+            if not questions:
+                return jsonify({'reply': '✅ No pending questions.'})
+            current_question = questions[0]
+            return jsonify({'reply': f"❓ {current_question}\n\nProvide your answer:"})
+
+        # Save answer to FAQ
+        question = current_question
+        answer = message
+
+        try:
+            with FAQ_LOCK:
+                faq = pd.read_csv(FAQ_FILE)
+                faq = faq.drop_duplicates(subset=['question'], keep='last')
+                faq = faq[faq['question'] != question]
+                new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
+                faq = pd.concat([faq, new_row], ignore_index=True)
+                faq.to_csv(FAQ_FILE, index=False)
+            
+            print(f"✅ Saved to FAQ: {question} -> {answer}")
+            
+            # Notify customers via SSE
+            send_sse_message(json.dumps({
+                'type': 'answer_received',
+                'question': question,
+                'answer': answer
+            }))
+            
+        except Exception as e:
+            print(f"⚠️ FAQ save error: {e}")
+            return jsonify({'reply': f'❌ Error saving answer: {str(e)}'})
+
+        # Remove from pending
+        remove_pending_question(question)
+
+        # Check for next question
+        current_question = None
         questions = get_pending_questions()
-        if not questions:
-            return jsonify({'reply': '✅ No pending questions.'})
-        current_question = questions[0]
-        return jsonify({'reply': f"❓ {current_question}\n\nProvide your answer:"})
 
-    # Save answer
-    question = current_question
-    answer = message
+        if questions:
+            next_q = questions[0]
+            current_question = next_q
+            reply = f"✅ Answer saved!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
+        else:
+            reply = "✅ Answer saved! No more pending questions."
 
-    try:
-        faq = pd.read_csv(FAQ_FILE)
-        faq = faq.drop_duplicates(subset=['question'], keep='last')
-        faq = faq[faq['question'] != question]
-        new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
-        faq = pd.concat([faq, new_row], ignore_index=True)
-        faq.to_csv(FAQ_FILE, index=False)
-        print(f"✅ Saved to FAQ: {question} -> {answer}")
-    except Exception as e:
-        print(f"⚠️ FAQ save error: {e}")
-
-    # Remove from pending
-    remove_pending_question(question)
-
-    # Notify customers
-    send_sse_message(f"✅ Admin answered: {answer}")
-
-    # Check for next
-    current_question = None
-    questions = get_pending_questions()
-
-    if questions:
-        next_q = questions[0]
-        current_question = next_q
-        reply = f"✅ Answer saved!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
-    else:
-        reply = "✅ Answer saved! No more pending questions."
-
-    return jsonify({'reply': reply})
-
-@app.route('/notify_customer', methods=['POST'])
-def notify_customer():
-    """Notify customers"""
-    data = request.get_json()
-    question = data.get("question")
-    answer = data.get("answer")
-
-    if not question or not answer:
-        return jsonify({"reply": "Invalid data"}), 400
-
-    try:
-        faq = pd.read_csv(FAQ_FILE)
-        new_entry = pd.DataFrame({'question': [question], 'answer': [answer]})
-        faq = pd.concat([faq, new_entry], ignore_index=True)
-        faq.to_csv(FAQ_FILE, index=False)
-        send_sse_message(f"✅ Update: {answer}")
-    except Exception as e:
-        print(f"⚠️ Notify error: {e}")
-
-    return jsonify({"reply": "Notified."})
+        return jsonify({'reply': reply})
 
 @app.route('/stream')
 def stream():
-    """SSE endpoint"""
+    """SSE endpoint for real-time updates"""
     q = Queue()
     clients.append(q)
+    
     def event_stream(queue):
-        while True:
-            msg = queue.get()
-            yield f"data: {msg}\n\n"
+        try:
+            while True:
+                msg = queue.get()
+                yield f"data: {msg}\n\n"
+        except GeneratorExit:
+            if queue in clients:
+                clients.remove(queue)
+    
     return Response(event_stream(q), mimetype="text/event-stream")
 
 # ==================== RUN ====================
