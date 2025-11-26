@@ -1,6 +1,6 @@
 """
-Papsi Repair Shop - Ultra-Lightweight Chatbot API
-OPTIMIZED FOR RENDER 512MB - Using Ultra-Light AI Models
+Papsi Repair Shop - Complete Chatbot API
+USES EXISTING FAQ.CSV - Optimized for Render 512MB
 """
 
 from flask import Flask, request, jsonify, Response
@@ -40,42 +40,31 @@ DB_CONFIG = {
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# Use absolute paths
+# Use your existing FAQ file
 FAQ_FILE = BASE_DIR / 'faq.csv'
 PENDING_FILE = BASE_DIR / 'pending_questions.csv'
 
-# Initialize files
+# Initialize files with YOUR existing FAQ
 def initialize_files():
     try:
-        if not FAQ_FILE.exists():
-            sample_faq = pd.DataFrame({
-                'question': [
-                    'What are your operating hours?',
-                    'How much does an oil change cost?',
-                    'My car is making strange noises',
-                    'Brakes are squeaking',
-                    'Engine won\'t start'
-                ],
-                'answer': [
-                    'We\'re open Monday to Saturday, 8 AM to 6 PM.',
-                    'Basic oil change starts at ₱800. Synthetic oil changes start at ₱1,200.',
-                    'That could be various issues. We recommend bringing it in for diagnosis.',
-                    'Squeaky brakes often need pad replacement. We offer free brake inspections.',
-                    'This could be battery, starter, or fuel system issues. We can diagnose it for you.'
-                ]
-            })
-            sample_faq.to_csv(FAQ_FILE, index=False)
-            print("✅ Created sample FAQ file")
-        
+        # Check if FAQ file exists and has content
+        if FAQ_FILE.exists():
+            faq_data = pd.read_csv(FAQ_FILE)
+            print(f"✅ USING YOUR FAQ FILE: {len(faq_data)} entries found")
+            
+            # Show what's in your FAQ
+            print("📝 YOUR FAQ QUESTIONS:")
+            for i, (idx, row) in enumerate(faq_data.iterrows()):
+                if i < 10:  # Show first 10
+                    print(f"   {i+1}. Q: {row['question']}")
+                    print(f"      A: {row['answer'][:80]}...")
+        else:
+            print("❌ FAQ file not found - please ensure faq.csv exists in root directory")
+            
+        # Initialize pending file
         if not PENDING_FILE.exists():
             pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
             print("✅ Created pending questions file")
-            
-        # Verify we can read the files
-        faq_test = pd.read_csv(FAQ_FILE)
-        pending_test = pd.read_csv(PENDING_FILE)
-        print(f"📁 FAQ File: {len(faq_test)} entries")
-        print(f"📁 Pending File: {len(pending_test)} entries")
         
     except Exception as e:
         print(f"❌ File initialization error: {e}")
@@ -83,80 +72,9 @@ def initialize_files():
 
 initialize_files()
 
-# ==================== ULTRA-LIGHTWEIGHT AI MODEL ====================
-model = None
-model_loaded = False
-model_type = None  # 'sentence_transformers', 'tfidf', or None
+# ==================== SIMPLE KEYWORD MATCHING (NO AI) ====================
+# Since you have FAQ issues, let's use reliable keyword matching
 
-def load_ultra_light_model():
-    """Load the lightest possible AI model with fallbacks"""
-    global model, model_loaded, model_type
-    
-    print("🚀 Loading ULTRA-LIGHT AI model...")
-    
-    # Force garbage collection first
-    gc.collect()
-    
-    try:
-        # OPTION 1: Lightest Sentence Transformer (22MB)
-        from sentence_transformers import SentenceTransformer
-        print("📥 Downloading all-MiniLM-L6-v2 (22MB)...")
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-        model_loaded = True
-        model_type = 'sentence_transformers'
-        print("✅ Ultra-light SentenceTransformer loaded! (22MB)")
-        return
-        
-    except Exception as e:
-        print(f"⚠️ SentenceTransformer failed: {e}")
-    
-    try:
-        # OPTION 2: TF-IDF (Almost no memory)
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.metrics.pairwise import cosine_similarity
-        model = {
-            'vectorizer': TfidfVectorizer(),
-            'similarity': cosine_similarity
-        }
-        model_loaded = True
-        model_type = 'tfidf'
-        print("✅ TF-IDF model loaded (minimal memory)")
-        return
-        
-    except Exception as e:
-        print(f"⚠️ TF-IDF failed: {e}")
-    
-    # OPTION 3: No model - pure keyword matching
-    print("🔧 No AI model - using enhanced keyword matching only")
-    model_loaded = False
-    model_type = None
-
-# Load model in background thread to prevent blocking
-def load_model_background():
-    """Load model in background to prevent app startup blocking"""
-    try:
-        load_ultra_light_model()
-    except Exception as e:
-        print(f"💥 Model loading thread crashed: {e}")
-        model_loaded = False
-
-print("🔄 Starting model loading in background...")
-model_thread = threading.Thread(target=load_model_background)
-model_thread.daemon = True
-model_thread.start()
-
-# ==================== SSE ====================
-clients = []
-
-def send_sse_message(data):
-    """Send SSE message to all connected clients"""
-    for q in clients[:]:
-        try:
-            q.put(data, timeout=0.2)
-        except Exception:
-            clients.remove(q)
-
-# ==================== HYBRID SEARCH SYSTEM ====================
 def preprocess_text(text):
     """Clean and preprocess text for better matching"""
     if not isinstance(text, str):
@@ -165,137 +83,87 @@ def preprocess_text(text):
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     return text
 
-def hybrid_search_faq(user_message, faq_data):
-    """Smart hybrid search: AI first, then keyword fallback"""
+def smart_faq_search(user_message, faq_data):
+    """
+    Smart FAQ search that works with your existing FAQ
+    Uses multiple matching strategies for best results
+    """
+    print(f"🔍 Searching FAQ for: '{user_message}'")
     
-    # Try AI model first if available
-    if model_loaded:
-        if model_type == 'sentence_transformers':
-            result = semantic_search(user_message, faq_data)
-            if result[0] is not None:
-                print(f"🤖 AI found match (score: {result[1]:.3f})")
-                return result
-        elif model_type == 'tfidf':
-            result = tfidf_search(user_message, faq_data)
-            if result[0] is not None:
-                print(f"🤖 TF-IDF found match (score: {result[1]:.3f})")
-                return result
+    user_clean = preprocess_text(user_message)
+    user_words = set(user_clean.split())
     
-    # Fallback to keyword matching
-    print("🔍 AI not available, using keyword matching")
-    return keyword_search(user_message, faq_data)
-
-def semantic_search(user_message, faq_data):
-    """Ultra-light semantic search with memory optimization"""
-    if not model_loaded or model_type != 'sentence_transformers':
+    # Remove very short words but keep important ones
+    user_words = {word for word in user_words if len(word) > 2}
+    
+    print(f"🔑 User words: {user_words}")
+    
+    if not user_words:
         return None, 0
         
-    try:
-        from sentence_transformers import util
+    best_match = None
+    best_score = 0
+    best_question = None
+    
+    for idx, row in faq_data.iterrows():
+        question = str(row['question'])
+        answer = str(row['answer'])
+        question_clean = preprocess_text(question)
         
-        # Clean and prepare data
-        faq_data = faq_data.dropna(subset=['question', 'answer'])
-        faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_data = faq_data[faq_data['answer'].str.strip() != '']
+        question_words = set(question_clean.split())
+        common_words = user_words.intersection(question_words)
         
-        if len(faq_data) == 0:
-            return None, 0
+        if not common_words:
+            continue
             
-        questions = faq_data['question'].tolist()
-        answers = faq_data['answer'].tolist()
+        # STRATEGY 1: Word overlap score
+        score = len(common_words) / len(user_words)
         
-        # Encode with small batch size to save memory
-        faq_embeddings = model.encode(questions, convert_to_tensor=True, batch_size=4, show_progress_bar=False)
-        user_emb = model.encode(user_message, convert_to_tensor=True)
+        # STRATEGY 2: Exact phrase bonus
+        if user_clean in question_clean:
+            score += 0.8
+            print(f"  ✅ Exact phrase match: '{user_clean}' in '{question}'")
         
-        # Calculate similarities
-        similarities = util.cos_sim(user_emb, faq_embeddings)[0]
-        best_idx = similarities.argmax()
-        best_score = float(similarities[best_idx])
+        # STRATEGY 3: Word order bonus
+        user_word_list = user_clean.split()
+        question_word_list = question_clean.split()
         
-        if best_score >= 0.3:  # Slightly higher threshold for better accuracy
-            return answers[best_idx], best_score
-        return None, best_score
+        # Check if words appear in similar order
+        order_matches = 0
+        for i, word in enumerate(user_word_list):
+            if i < len(question_word_list) and word == question_word_list[i]:
+                order_matches += 1
         
-    except Exception as e:
-        print(f"⚠️ Semantic search error: {e}")
-        return None, 0
+        if order_matches > 0:
+            score += order_matches * 0.1
+        
+        # STRATEGY 4: Important word bonus
+        important_words = {'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 'wheel', 'ac', 'air', 'conditioning', 'transmission', 'suspension'}
+        for word in common_words:
+            if word in important_words:
+                score += 0.2
+            elif len(word) > 4:
+                score += 0.1
+        
+        print(f"  📝 Checking: '{question}'")
+        print(f"  🔄 Common words: {common_words}")
+        print(f"  📊 Score: {score:.3f}")
+        
+        # LOWER THRESHOLD for better matching
+        if score > best_score and score > 0.1:
+            best_score = score
+            best_match = answer
+            best_question = question
+    
+    if best_match:
+        print(f"🎯 BEST MATCH FOUND: '{best_question}' -> score: {best_score:.3f}")
+    else:
+        print(f"❌ NO MATCH FOUND (best score: {best_score:.3f})")
+        
+    return best_match, best_score
 
-def tfidf_search(user_message, faq_data):
-    """Lightweight TF-IDF search"""
-    try:
-        questions = faq_data['question'].tolist()
-        answers = faq_data['answer'].tolist()
-        
-        # Fit TF-IDF
-        vectorizer = model['vectorizer']
-        tfidf_matrix = vectorizer.fit_transform(questions)
-        
-        # Transform user message
-        user_vector = vectorizer.transform([user_message])
-        
-        # Calculate similarities
-        similarities = model['similarity'](user_vector, tfidf_matrix)[0]
-        best_idx = similarities.argmax()
-        best_score = similarities[best_idx]
-        
-        if best_score > 0.2:
-            return answers[best_idx], best_score
-        return None, best_score
-        
-    except Exception as e:
-        print(f"⚠️ TF-IDF search error: {e}")
-        return None, 0
-
-def keyword_search(user_message, faq_data):
-    """Enhanced keyword matching as final fallback"""
-    try:
-        user_clean = preprocess_text(user_message)
-        user_words = set(user_clean.split())
-        
-        # Remove very short words
-        user_words = {word for word in user_words if len(word) > 2}
-        
-        if not user_words:
-            return None, 0
-            
-        best_match = None
-        best_score = 0
-        
-        for idx, row in faq_data.iterrows():
-            question = preprocess_text(str(row['question']))
-            answer = str(row['answer'])
-            
-            question_words = set(question.split())
-            common_words = user_words.intersection(question_words)
-            
-            if not common_words:
-                continue
-                
-            # Calculate match score
-            score = len(common_words) / len(user_words)
-            
-            # Bonus for exact phrase matches
-            if user_clean in question:
-                score += 0.5
-                
-            # Bonus for longer matching words
-            for word in common_words:
-                if len(word) > 4:
-                    score += 0.1
-            
-            if score > best_score and score > 0.2:
-                best_score = score
-                best_match = answer
-                
-        return best_match, best_score
-        
-    except Exception as e:
-        print(f"⚠️ Keyword search error: {e}")
-        return None, 0
-
-def hybrid_search_services(user_message, services):
-    """Hybrid service search"""
+def smart_service_search(user_message, services):
+    """Smart service search"""
     user_clean = preprocess_text(user_message)
     user_words = [word for word in user_clean.split() if len(word) > 2]
     
@@ -304,28 +172,48 @@ def hybrid_search_services(user_message, services):
         
     matches = []
     
+    # Common service keywords mapping
+    service_keywords = {
+        'oil': ['oil change', 'oil service', 'lube'],
+        'brake': ['brake service', 'brake pad', 'brake repair'],
+        'engine': ['engine repair', 'engine diagnostic', 'tune up'],
+        'tire': ['tire rotation', 'tire service', 'wheel alignment'],
+        'ac': ['ac repair', 'air conditioning', 'ac service'],
+        'battery': ['battery replacement', 'battery service'],
+        'transmission': ['transmission service', 'transmission repair'],
+        'suspension': ['suspension repair', 'suspension service']
+    }
+    
     for service in services:
         name = preprocess_text(service['service_name'])
         desc = preprocess_text(service['description'])
         
         score = 0
         
-        # Keyword matching
+        # Basic keyword matching
         for keyword in user_words:
             if keyword in name:
                 score += 2.0
             elif keyword in desc:
                 score += 1.0
-                
+        
+        # Enhanced keyword matching using service categories
+        for category, keywords in service_keywords.items():
+            if any(cat_word in user_clean for cat_word in [category] + keywords):
+                if any(cat_word in name for cat_word in keywords):
+                    score += 3.0
+                elif any(cat_word in desc for cat_word in keywords):
+                    score += 2.0
+        
         # Exact phrase bonus
         if user_clean in name:
-            score += 3.0
+            score += 4.0
         elif user_clean in desc:
-            score += 2.0
+            score += 3.0
             
         if score > 0.5:
             matches.append((service, score))
-            
+    
     # Return top 3 matches
     matches.sort(key=lambda x: x[1], reverse=True)
     return matches[:3]
@@ -433,61 +321,92 @@ def remove_pending_question(question):
     except Exception as e:
         print(f"❌ Error removing pending question: {e}")
 
+# ==================== SSE ====================
+clients = []
+
+def send_sse_message(data):
+    """Send SSE message to all connected clients"""
+    for q in clients[:]:
+        try:
+            q.put(data, timeout=0.2)
+        except Exception:
+            clients.remove(q)
+
 # ==================== ENDPOINTS ====================
 
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({
         "status": "healthy",
-        "model_loaded": model_loaded,
-        "model_type": model_type,
-        "mode": "ultra-light-ai"
+        "mode": "smart-keyword-matching",
+        "faq_file_exists": FAQ_FILE.exists()
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
-        "status": "running",
-        "version": "ultra-light-ai-1.0",
-        "model_status": "loaded" if model_loaded else "loading",
-        "model_type": model_type
+        "status": "running", 
+        "version": "smart-matching-1.0",
+        "faq_entries": "using your existing faq.csv"
     }), 200
 
-@app.route('/test', methods=['GET'])
-def test():
-    """Test endpoint to verify all components"""
+@app.route('/debug_faq', methods=['GET'])
+def debug_faq():
+    """Debug endpoint to check FAQ content"""
     try:
-        # Test files
-        faq_exists = FAQ_FILE.exists()
-        pending_exists = PENDING_FILE.exists()
-        
-        # Test database
-        services = get_services_from_db()
-        db_works = len(services) >= 0
-        
-        # Test model
-        model_status = "loaded" if model_loaded else "failed"
+        if not FAQ_FILE.exists():
+            return jsonify({"error": "FAQ file not found"}), 404
+            
+        faq_data = pd.read_csv(FAQ_FILE)
+        faq_data = faq_data.dropna(subset=['question', 'answer'])
+        faq_data = faq_data[faq_data['question'].str.strip() != '']
+        faq_data = faq_data[faq_data['answer'].str.strip() != '']
         
         return jsonify({
-            "status": "success",
-            "faq_file": faq_exists,
-            "pending_file": pending_exists,
-            "database": db_works,
-            "services_count": len(services),
-            "model_status": model_status,
-            "model_type": model_type
+            "faq_file_exists": True,
+            "total_entries": len(faq_data),
+            "columns": faq_data.columns.tolist(),
+            "questions": faq_data['question'].tolist(),
+            "answers_preview": [answer[:100] + "..." for answer in faq_data['answer'].tolist()]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/test_search', methods=['POST'])
+def test_search():
+    """Test search for specific questions"""
+    data = request.get_json()
+    test_question = data.get('question', '').strip()
+    
+    if not test_question:
+        return jsonify({"error": "Please provide a question"}), 400
+    
+    try:
+        if not FAQ_FILE.exists():
+            return jsonify({"error": "FAQ file not found"}), 404
+            
+        faq_data = pd.read_csv(FAQ_FILE)
+        faq_data = faq_data.dropna(subset=['question', 'answer'])
+        faq_data = faq_data[faq_data['question'].str.strip() != '']
+        faq_data = faq_data[faq_data['answer'].str.strip() != '']
+        
+        result, score = smart_faq_search(test_question, faq_data)
+        
+        return jsonify({
+            "test_question": test_question,
+            "found_match": result is not None,
+            "answer": result,
+            "confidence_score": score,
+            "faq_entries_searched": len(faq_data)
         })
         
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint with hybrid AI search"""
+    """Customer chatbot endpoint - RELIABLE VERSION"""
     try:
         # Get and validate input
         data = request.get_json()
@@ -498,22 +417,30 @@ def chat():
         if not user_message:
             return jsonify({'reply': "Please describe your vehicle problem."})
 
-        print(f"📨 Received: {user_message}")
+        print(f"📨 Received: '{user_message}'")
         reply_parts = []
         
-        # Check FAQ with hybrid search
+        # Check FAQ with SMART matching
         try:
-            faq_data = pd.read_csv(FAQ_FILE)
-            faq_data = faq_data.dropna(subset=['question', 'answer'])
-            faq_data = faq_data[faq_data['question'].str.strip() != '']
-            faq_data = faq_data[faq_data['answer'].str.strip() != '']
-            
-            faq_reply, score = hybrid_search_faq(user_message, faq_data)
-            
-            if faq_reply:
-                reply_parts.append(f"🔧 {faq_reply}")
-                print(f"✅ Found FAQ match (score: {score:.3f})")
+            if not FAQ_FILE.exists():
+                print("❌ FAQ file not found")
+                faq_reply = None
+            else:
+                faq_data = pd.read_csv(FAQ_FILE)
+                faq_data = faq_data.dropna(subset=['question', 'answer'])
+                faq_data = faq_data[faq_data['question'].str.strip() != '']
+                faq_data = faq_data[faq_data['answer'].str.strip() != '']
                 
+                print(f"📊 Searching {len(faq_data)} FAQ entries...")
+                
+                faq_reply, score = smart_faq_search(user_message, faq_data)
+                
+                if faq_reply:
+                    reply_parts.append(f"🔧 {faq_reply}")
+                    print(f"✅ FAQ MATCH FOUND (score: {score:.3f})")
+                else:
+                    print(f"❌ NO FAQ MATCH (best score: {score:.3f})")
+                    
         except Exception as e:
             print(f"⚠️ FAQ processing error: {e}")
             faq_reply = None
@@ -521,7 +448,7 @@ def chat():
         # Check Services
         try:
             services = get_services_from_db()
-            top_services = hybrid_search_services(user_message, services)
+            top_services = smart_service_search(user_message, services)
             
             if top_services:
                 reply_parts.append("🧰 Based on your concern, here are some services:")
@@ -620,13 +547,14 @@ def admin_chat():
 
         # Add to FAQ
         try:
-            faq = pd.read_csv(FAQ_FILE)
-            # Remove existing entry if any
-            faq = faq[faq['question'] != question]
-            new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
-            faq = pd.concat([faq, new_row], ignore_index=True)
-            faq.to_csv(FAQ_FILE, index=False)
-            print(f"✅ Added to FAQ: {question}")
+            if FAQ_FILE.exists():
+                faq = pd.read_csv(FAQ_FILE)
+                # Remove existing entry if any
+                faq = faq[faq['question'] != question]
+                new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
+                faq = pd.concat([faq, new_row], ignore_index=True)
+                faq.to_csv(FAQ_FILE, index=False)
+                print(f"✅ Added to FAQ: {question}")
         except Exception as e:
             print(f"⚠️ FAQ save error: {e}")
 
@@ -673,13 +601,9 @@ def stream():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n🚀 Starting ULTRA-LIGHT Papsi Chatbot on port {port}")
-    print("💡 Using hybrid AI system with fallbacks")
-    print("🎯 Model priority: SentenceTransformer → TF-IDF → Keyword Matching")
-    print("📊 Memory optimized for Render 512MB")
-    
-    # Wait a bit for model to load
-    import time
-    time.sleep(2)
+    print(f"\n🚀 Starting Papsi Chatbot on port {port}")
+    print("💡 Using SMART keyword matching with your existing FAQ")
+    print("📊 No AI dependencies - reliable and fast")
+    print("🎯 Optimized for auto repair domain")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
