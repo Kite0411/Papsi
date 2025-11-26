@@ -168,60 +168,37 @@ def smart_faq_search(user_message, faq_data):
     return best_match, best_score
 
 def smart_service_search(user_message, services):
-    """Smart service search with proper symptom-to-service mapping"""
+    """Smart service search that only shows relevant services"""
     user_clean = preprocess_text(user_message)
-    user_words = set(user_clean.split())
-    
-    # Remove very short words but keep important ones
-    user_words = {word for word in user_words if len(word) > 2}
     
     print(f"🔧 Service search for: '{user_message}'")
-    print(f"🔧 User words: {user_words}")
     
-    if not user_words:
-        return []
-    
-    # Enhanced symptom-to-service mapping
-    symptom_service_map = {
-        # Brake-related symptoms
-        'brake': ['brake service', 'brake repair', 'brake fluid', 'brake bleeding'],
-        'soft': ['brake service', 'brake bleeding', 'brake fluid'],
-        'spongy': ['brake service', 'brake bleeding', 'brake fluid'],
+    # Enhanced keyword mapping for auto repair context
+    service_keywords = {
+        'brake': ['brake service', 'brake repair', 'brake fluid', 'brake diagnostic'],
+        'soft': ['brake service', 'brake fluid'],
+        'spongy': ['brake service', 'brake fluid'], 
         'pedal': ['brake service', 'brake repair'],
         'stop': ['brake service', 'brake repair'],
-        'squeal': ['brake service', 'brake pad replacement'],
-        'grind': ['brake service', 'brake pad replacement'],
+        'squeal': ['brake service', 'brake pad'],
+        'grind': ['brake service', 'brake pad'],
         
-        # Engine-related symptoms
-        'engine': ['engine diagnostic', 'engine repair'],
-        'noise': ['engine diagnostic', 'suspension repair'],
-        'overheat': ['cooling system', 'engine diagnostic'],
-        'misfire': ['engine diagnostic', 'ignition system'],
-        'start': ['battery service', 'starter repair', 'electrical diagnostic'],
-        
-        # Electrical symptoms
-        'battery': ['battery service', 'electrical diagnostic'],
-        'light': ['electrical repair', 'bulb replacement'],
-        'electrical': ['electrical diagnostic', 'wiring repair'],
-        'power': ['electrical diagnostic', 'battery service'],
-        
-        # AC symptoms
-        'ac': ['ac repair', 'ac service'],
-        'air': ['ac repair', 'ac service'],
-        'conditioning': ['ac repair', 'ac service'],
+        'ac': ['ac repair', 'ac service', 'aircon cleaning'],
+        'air': ['ac repair', 'ac service', 'aircon cleaning'],
         'cool': ['ac repair', 'ac service'],
         'hot': ['ac repair', 'cooling system'],
         
-        # Tire/Suspension symptoms
-        'tire': ['tire service', 'wheel alignment'],
-        'vibration': ['wheel alignment', 'tire balance', 'suspension repair'],
-        'alignment': ['wheel alignment', 'suspension repair'],
-        'steering': ['wheel alignment', 'suspension repair', 'power steering'],
+        'electrical': ['electrical', 'battery', 'wiring'],
+        'battery': ['battery', 'electrical'],
+        'light': ['electrical', 'light repair'],
         
-        # Transmission symptoms
-        'transmission': ['transmission service', 'transmission repair'],
-        'gear': ['transmission service', 'clutch repair'],
-        'shift': ['transmission service', 'clutch repair'],
+        'engine': ['engine diagnostic', 'engine repair'],
+        'noise': ['engine diagnostic', 'suspension repair'],
+        'start': ['battery service', 'starter repair'],
+        
+        'tire': ['tire service', 'wheel alignment'],
+        'vibration': ['wheel alignment', 'tire balance'],
+        'alignment': ['wheel alignment'],
     }
     
     matches = []
@@ -232,68 +209,32 @@ def smart_service_search(user_message, services):
         
         score = 0
         
-        # STRATEGY 1: Direct symptom-to-service mapping (HIGH PRIORITY)
-        for symptom, service_list in symptom_service_map.items():
-            if symptom in user_clean:
-                # Check if this service matches any in the symptom mapping
-                service_name_clean = preprocess_text(service['service_name'])
-                for target_service in service_list:
-                    if target_service in service_name_clean or target_service in desc:
-                        score += 3.0  # High bonus for symptom-based matching
-                        print(f"  ✅ Symptom '{symptom}' -> service '{service['service_name']}'")
+        # Check if service is relevant to user's problem
+        for user_word, relevant_services in service_keywords.items():
+            if user_word in user_clean:
+                # This word in user's message matches our keyword map
+                for relevant_service in relevant_services:
+                    if relevant_service in name or relevant_service in desc:
+                        score += 3.0  # Strong match
+                        print(f"  ✅ Relevant: '{user_word}' -> '{service['service_name']}'")
         
-        # STRATEGY 2: Exact keyword matching in service name (MEDIUM PRIORITY)
-        for keyword in user_words:
-            if keyword in name:
-                score += 2.0
-            elif keyword in desc:
-                score += 1.0
-        
-        # STRATEGY 3: Category-based matching
-        service_categories = {
-            'brake': ['brake', 'pad', 'rotor', 'caliper', 'bleed'],
-            'engine': ['engine', 'motor', 'cylinder', 'piston', 'valve'],
-            'electrical': ['electrical', 'battery', 'wiring', 'light', 'sensor'],
-            'ac': ['ac', 'air conditioning', 'cooling', 'compressor'],
-            'transmission': ['transmission', 'gear', 'clutch', 'shift'],
-            'suspension': ['suspension', 'shock', 'strut', 'alignment', 'steering']
-        }
-        
-        for category, keywords in service_categories.items():
-            # If user mentions category-related words
-            if any(cat_word in user_clean for cat_word in [category] + keywords):
-                # And service matches that category
-                if any(cat_word in name for cat_word in keywords):
-                    score += 2.0
-                elif any(cat_word in desc for cat_word in keywords):
-                    score += 1.5
-        
-        # STRATEGY 4: Exact phrase bonus
-        if user_clean in name:
-            score += 4.0
-        elif user_clean in desc:
-            score += 3.0
-        
-        # STRATEGY 5: Penalize completely irrelevant services
-        irrelevant_combinations = [
-            ('brake', 'ac'), ('brake', 'aircon'), ('brake', 'cleaning'),
-            ('soft', 'ac'), ('pedal', 'ac'), ('stop', 'ac')
-        ]
-        
-        for user_term, irrelevant_service in irrelevant_combinations:
-            if user_term in user_clean and irrelevant_service in name:
-                score = 0  # Completely exclude irrelevant matches
-                print(f"  🚫 Excluded irrelevant: {service['service_name']}")
+        # Basic keyword matching (weaker)
+        for word in user_clean.split():
+            if len(word) > 3:  # Only longer words
+                if word in name:
+                    score += 1.0
+                elif word in desc:
+                    score += 0.5
         
         print(f"  📊 Service: {service['service_name']} -> Score: {score:.2f}")
         
-        # Only include services with meaningful matches
-        if score >= 2.0:  # Increased threshold
+        # Only include services with good matches
+        if score >= 2.0:  # Must have decent relevance
             matches.append((service, score))
     
-    # Return top 3 matches by score
+    # Return top relevant matches
     matches.sort(key=lambda x: x[1], reverse=True)
-    return matches[:3]
+    return matches[:3]  # Max 3 recommendations
 
 # ==================== DATABASE ====================
 
