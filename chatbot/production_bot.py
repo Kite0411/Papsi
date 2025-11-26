@@ -1,6 +1,6 @@
 """
 Papsi Repair Shop - Complete Chatbot API 
-OPTIMIZED FOR YOUR 3-COLUMN FAQ.CSV
+FIXED VERSION - Admin replies now reach customers via SSE
 """
 
 from flask import Flask, request, jsonify, Response
@@ -16,6 +16,7 @@ import json
 import re
 import traceback
 import gc
+import time
 
 load_dotenv()
 app = Flask(__name__)
@@ -77,6 +78,50 @@ def initialize_files():
         traceback.print_exc()
 
 initialize_files()
+
+# ==================== IMPROVED SSE IMPLEMENTATION ====================
+
+class ClientQueue:
+    def __init__(self):
+        self.queue = Queue()
+        self.last_activity = time.time()
+
+clients = {}  # Store by session_id or user_id
+
+def send_sse_message(data, target_user_id=None):
+    """Send SSE message to specific user or all users"""
+    if target_user_id and target_user_id in clients:
+        try:
+            clients[target_user_id].queue.put(data, timeout=0.2)
+            print(f"✅ SSE sent to user {target_user_id}: {data[:100]}...")
+        except Exception as e:
+            print(f"❌ SSE error for user {target_user_id}: {e}")
+            clients.pop(target_user_id, None)
+    else:
+        # Broadcast to all (for admin notifications)
+        for user_id, client in list(clients.items()):
+            try:
+                client.queue.put(data, timeout=0.2)
+                print(f"✅ SSE broadcast to user {user_id}")
+            except Exception:
+                clients.pop(user_id, None)
+
+def cleanup_clients():
+    """Clean up inactive clients periodically"""
+    while True:
+        time.sleep(60)  # Check every minute
+        current_time = time.time()
+        inactive_users = [
+            user_id for user_id, client in clients.items()
+            if current_time - client.last_activity > 300  # 5 minutes
+        ]
+        for user_id in inactive_users:
+            clients.pop(user_id, None)
+            print(f"🧹 Cleaned up inactive client: {user_id}")
+
+# Start cleanup thread
+cleanup_thread = threading.Thread(target=cleanup_clients, daemon=True)
+cleanup_thread.start()
 
 # ==================== OPTIMIZED FAQ SEARCH FOR YOUR DATA ====================
 
@@ -328,17 +373,6 @@ def remove_pending_question(question):
     except Exception as e:
         print(f"❌ Error removing pending question: {e}")
 
-# ==================== SSE ====================
-clients = []
-
-def send_sse_message(data):
-    """Send SSE message to all connected clients"""
-    for q in clients[:]:
-        try:
-            q.put(data, timeout=0.2)
-        except Exception:
-            clients.remove(q)
-
 # ==================== ENDPOINTS ====================
 
 @app.route('/health', methods=['GET'])
@@ -478,13 +512,13 @@ def chat():
             if saved:
                 reply_parts.append(
                     "🤖 I'm not sure about that yet. I've forwarded your question to our admin. "
-                    "You'll be updated soon!"
+                    "You'll be updated soon via real-time notification!"
                 )
                 print(f"📤 Forwarded to admin: {user_message}")
             else:
                 reply_parts.append(
                     "🤖 Your question is already being reviewed by our admin. "
-                    "You'll be updated soon!"
+                    "You'll be updated soon via real-time notification!"
                 )
 
         reply = "\n\n".join(reply_parts)
@@ -530,7 +564,7 @@ def get_next_question():
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
-    """Admin chatbot endpoint"""
+    """Admin chatbot endpoint - FIXED VERSION"""
     global current_question
     try:
         data = request.get_json()
@@ -571,9 +605,18 @@ def admin_chat():
         # Remove from pending
         remove_pending_question(question)
 
-        # Notify customers
-        notification_message = f"✅ **Update on your question:**\n\n\"{question}\"\n\n**Admin Response:** {answer}"
+        # 🔥 CRITICAL FIX: Create proper notification
+        notification_message = json.dumps({
+            "type": "admin_reply",
+            "original_question": question,
+            "admin_answer": answer,
+            "timestamp": time.time(),
+            "message": f"✅ **Admin Response:**\n\n**Your Question:** {question}\n\n**Answer:** {answer}"
+        })
+        
+        # Send notification via SSE
         send_sse_message(notification_message)
+        print(f"📢 Admin notification sent: {notification_message}")
 
         # Get next question
         current_question = None
@@ -590,22 +633,38 @@ def admin_chat():
         
     except Exception as e:
         print(f"💥 Admin chat error: {e}")
+        traceback.print_exc()
         return jsonify({'reply': 'Error processing request.'}), 500
 
 @app.route('/stream')
 def stream():
-    """SSE endpoint for customer updates"""
+    """SSE endpoint for customer updates - FIXED VERSION"""
     def event_stream():
-        q = Queue()
-        clients.append(q)
+        # Generate a simple user ID for this session
+        user_id = str(hash(request.remote_addr + str(time.time())))
+        q = ClientQueue()
+        clients[user_id] = q
+        
+        print(f"🔗 New SSE connection: {user_id}")
+        
         try:
             while True:
-                msg = q.get()
+                msg = q.queue.get(timeout=30)  # 30 second timeout
                 yield f"data: {json.dumps({'message': msg})}\n\n"
-        except GeneratorExit:
-            clients.remove(q)
+                q.last_activity = time.time()
+        except Exception as e:
+            print(f"🔴 SSE connection closed: {user_id} - {e}")
+            clients.pop(user_id, None)
     
-    return Response(event_stream(), mimetype="text/event-stream")
+    return Response(
+        event_stream(), 
+        mimetype="text/event-stream",
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
 
 # ==================== RUN ====================
 
@@ -613,7 +672,7 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n🚀 Starting Papsi Chatbot on port {port}")
     print("💡 OPTIMIZED for your 3-column FAQ with auto repair content")
-    print("🎯 Lower matching thresholds for better results")
+    print("🎯 FIXED: Admin replies now reach customers via SSE")
     print("📊 Using smart keyword matching optimized for vehicle problems")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
