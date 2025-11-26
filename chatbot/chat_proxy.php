@@ -44,7 +44,8 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 ]);
 // Set timeout (AI processing can take 30-60 seconds on free tier first request)
 // Increase timeout for model loading
-curl_setopt($ch, CURLOPT_TIMEOUT, 90); // Give model time to loadcurl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($ch, CURLOPT_TIMEOUT, 90); // Give model time to load
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
