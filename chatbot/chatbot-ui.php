@@ -120,169 +120,35 @@ Chatbot-ui
   - Expects JSON { reply }
   - Includes timeout and better error handling
 */
-const API_URL = '/chatbot/chat_proxy.php';
-const SSE_URL = '/stream';
-
+const API_URL = '/chatbot/chat_proxy.php'; // must match your Flask address
 let chatbotMinimized = true;
 let isTyping = false;
 let welcomeShown = false;
-let eventSource = null;
-let pendingQuestions = [];
-
-// ==================== SSE REAL-TIME UPDATES ====================
-function setupSSE() {
-    try {
-        eventSource = new EventSource(SSE_URL);
-        
-        eventSource.onmessage = function(event) {
-            try {
-                const data = JSON.parse(event.data);
-                const notification = JSON.parse(data.message);
-                
-                console.log('SSE received:', notification);
-                
-                if (notification.type === 'admin_reply') {
-                    showAdminReply(notification);
-                    showNotification('🎉 Admin has replied to your question!');
-                    removePendingQuestion(notification.original_question);
-                }
-            } catch (e) {
-                console.log('SSE raw message:', event.data);
-            }
-        };
-        
-        eventSource.onerror = function(event) {
-            console.error('SSE connection error:', event);
-            setTimeout(setupSSE, 5000);
-        };
-        
-        console.log('SSE connection established');
-    } catch (error) {
-        console.error('Failed to setup SSE:', error);
-    }
-}
-
-function showAdminReply(notification) {
-    const messages = document.getElementById('chatbotMessages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'chatbot-message message-admin';
-    
-    const avatar = document.createElement('div');
-    avatar.className = 'message-avatar';
-    avatar.textContent = '👨‍🔧';
-    
-    const messageContent = document.createElement('div');
-    messageContent.className = 'message-content';
-    messageContent.innerHTML = `
-        <strong>Admin Response:</strong><br>
-        ${escapeHtml(notification.admin_answer).replace(/\n/g, '<br>')}
-    `;
-    
-    messageDiv.appendChild(avatar);
-    messageDiv.appendChild(messageContent);
-    messages.appendChild(messageDiv);
-    
-    scrollToBottom();
-}
-
-function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #4CAF50, #45a049);
-        color: white;
-        padding: 12px 16px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 10000;
-        transform: translateX(400px);
-        transition: transform 0.3s ease;
-        max-width: 300px;
-        font-size: 14px;
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-
-    setTimeout(() => notification.style.transform = 'translateX(0)', 100);
-
-    setTimeout(() => {
-        notification.style.transform = 'translateX(400px)';
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 300);
-    }, 5000);
-}
-
-// ==================== PENDING QUESTIONS TRACKING ====================
-function loadPendingQuestions() {
-    const stored = localStorage.getItem('chatbot_pending_questions');
-    if (stored) {
-        try {
-            pendingQuestions = JSON.parse(stored);
-        } catch (e) {
-            pendingQuestions = [];
-        }
-    }
-    return pendingQuestions;
-}
-
-function savePendingQuestions() {
-    localStorage.setItem('chatbot_pending_questions', JSON.stringify(pendingQuestions));
-}
-
-function addPendingQuestion(question) {
-    loadPendingQuestions();
-    if (!pendingQuestions.find(q => q.question === question)) {
-        pendingQuestions.push({
-            question: question,
-            timestamp: Date.now()
-        });
-        savePendingQuestions();
-        console.log('Question added to pending:', question);
-    }
-}
-
-function removePendingQuestion(question) {
-    loadPendingQuestions();
-    const initialLength = pendingQuestions.length;
-    pendingQuestions = pendingQuestions.filter(q => q.question !== question);
-    if (pendingQuestions.length !== initialLength) {
-        savePendingQuestions();
-        console.log('Question removed from pending:', question);
-    }
-}
-
-// ==================== CHAT FUNCTIONS ====================
 function toggleChatbot() {
     const chatbot = document.getElementById('chatbot');
     const toggle = document.getElementById('chatbotToggle');
     const body = document.getElementById('chatbotBody');
-    const status = document.getElementById('chatbotStatus');
-    const icon = document.getElementById('chatbotIcon');
+    const status = document.getElementById('chatbotStatus'); // 🟢 green dot
+    const icon = document.getElementById('chatbotIcon'); // 💬 circle icon
     chatbotMinimized = !chatbotMinimized;
    
     if (chatbotMinimized) {
         chatbot.classList.add('chatbot-minimized');
         toggle.textContent = '';
         body.style.display = 'none';
-        icon.style.display = 'flex';
-        status.style.display = 'none';
+        icon.style.display = 'flex'; // 💬 show circle icon
+        status.style.display = 'none'; // hide green dot
         toggle.setAttribute('aria-expanded', 'false');
     } else {
         chatbot.classList.remove('chatbot-minimized');
         toggle.textContent = '−';
         body.style.display = 'flex';
-        icon.style.display = 'none';
-        status.style.display = 'inline-block';
+        icon.style.display = 'none'; // hide circle icon
+        status.style.display = 'inline-block'; // show green dot again
         toggle.setAttribute('aria-expanded', 'true');
         document.getElementById('chatbotInput').focus();
     }
 }
-
 function showTyping() {
     if (isTyping) return;
     isTyping = true;
@@ -291,14 +157,12 @@ function showTyping() {
     typing.setAttribute('aria-hidden', 'false');
     scrollToBottom();
 }
-
 function hideTyping() {
     isTyping = false;
     const typing = document.getElementById('chatbotTyping');
     typing.style.display = 'none';
     typing.setAttribute('aria-hidden', 'true');
 }
-
 function addMessage(content, isUser = false) {
     const messages = document.getElementById('chatbotMessages');
     const messageDiv = document.createElement('div');
@@ -315,44 +179,29 @@ function addMessage(content, isUser = false) {
     messageDiv.appendChild(avatar);
     messageDiv.appendChild(messageContent);
    
+    // Remove welcome message if it exists
     const welcome = document.getElementById('chatbotWelcome');
     if (welcome) welcome.remove();
    
     messages.appendChild(messageDiv);
     scrollToBottom();
-    
-    // Track pending questions when bot says it's forwarding to admin
-    if (!isUser && content && (
-        content.includes("I'm not sure") ||
-        content.includes("forwarded your question") ||
-        content.includes("already being reviewed")
-    )) {
-        const userMessages = messages.querySelectorAll('.message-user .message-content');
-        if (userMessages.length > 0) {
-            const lastUserMessage = userMessages[userMessages.length - 1].textContent;
-            addPendingQuestion(lastUserMessage);
-        }
-    }
 }
-
+// simple escaping to avoid raw HTML injection
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>"']/g, function(m) {
         return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
     });
 }
-
 function scrollToBottom() {
     const messages = document.getElementById('chatbotMessages');
     setTimeout(() => messages.scrollTop = messages.scrollHeight, 80);
 }
-
 function askQuestion(question) {
     const input = document.getElementById('chatbotInput');
     input.value = question;
     sendChatbotMessage();
 }
-
 async function sendChatbotMessage() {
     const input = document.getElementById('chatbotInput');
     const sendBtn = document.getElementById('chatbotSend');
@@ -360,16 +209,20 @@ async function sendChatbotMessage() {
    
     if (!message || isTyping) return;
    
+    // Disable input and button
     input.disabled = true;
     sendBtn.disabled = true;
    
+    // Add user message
     addMessage(message, true);
     input.value = '';
    
+    // Show typing indicator
     showTyping();
    
+    // Use AbortController to implement a timeout
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
    
     try {
         const resp = await fetch(API_URL, {
@@ -383,12 +236,14 @@ async function sendChatbotMessage() {
         clearTimeout(timeout);
        
         if (!resp.ok) {
+            // Try to read server error message if available
             let text = await resp.text().catch(()=>null);
             hideTyping();
             addMessage(`Sorry, server returned ${resp.status}. ${text ? 'Details: '+text : ''}`, false);
             return;
         }
        
+        // parse JSON safely
         const data = await resp.json().catch(() => null);
         hideTyping();
        
@@ -408,45 +263,161 @@ async function sendChatbotMessage() {
             console.error('Chatbot error:', err);
         }
     } finally {
+        // Re-enable input and button
         input.disabled = false;
         sendBtn.disabled = false;
         input.focus();
     }
 }
-
-// ==================== EVENT LISTENERS ====================
+// keyboard support
 document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendChatbotMessage();
     }
 });
-
+// autofocus behavior
 document.getElementById('chatbotInput').addEventListener('focus', function() {
     if (chatbotMinimized) toggleChatbot();
 });
-
-// ==================== INITIALIZATION ====================
+// initial welcome message on page load (only once)
 document.addEventListener('DOMContentLoaded', function() {
-    // Setup real-time SSE connection
-    setupSSE();
-    
-    // Load any existing pending questions
-    loadPendingQuestions();
-    
-    // Initial welcome message
     setTimeout(() => {
         const messages = document.getElementById('chatbotMessages');
-        if (messages.children.length === 1 && !welcomeShown) {
+        if (messages.children.length === 1 && welcomeShown) {
             addMessage("Hi! I'm your vehicle diagnostic assistant. Describe your car problem and I'll recommend the right service for you!", false);
-            welcomeShown = true;
+            welcomeShown = false;
         }
     }, 600);
+    // Start polling for answers to pending questions
+    startPollingForAnswers();
 });
-
-// Clean up SSE connection when page unloads
-window.addEventListener('beforeunload', function() {
-    if (eventSource) {
-        eventSource.close();
+// ==================== POLLING FOR ADMIN ANSWERS ====================
+let pollingInterval = null;
+let pendingQuestions = [];
+// Load pending questions from localStorage
+function loadPendingQuestions() {
+    const stored = localStorage.getItem('chatbot_pending_questions');
+    if (stored) {
+        try {
+            pendingQuestions = JSON.parse(stored);
+        } catch (e) {
+            pendingQuestions = [];
+        }
     }
-});
+}
+// Save pending questions to localStorage
+function savePendingQuestions() {
+    localStorage.setItem('chatbot_pending_questions', JSON.stringify(pendingQuestions));
+}
+// Add question to pending list
+function addPendingQuestion(question) {
+    loadPendingQuestions();
+    // Don't add duplicates
+    if (!pendingQuestions.find(q => q.question === question)) {
+        pendingQuestions.push({
+            question: question,
+            timestamp: Date.now()
+        });
+        savePendingQuestions();
+    }
+}
+// Remove question from pending list
+function removePendingQuestion(question) {
+    loadPendingQuestions();
+    pendingQuestions = pendingQuestions.filter(q => q.question !== question);
+    savePendingQuestions();
+}
+// Check if a question now has an answer
+async function checkQuestionAnswered(question) {
+    try {
+        const resp = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: question })
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        // Check if response contains "I'm not sure" or "forwarded" (unanswered)
+        const isStillPending =
+            data.reply && (
+                data.reply.includes("I'm not sure") ||
+                data.reply.includes("forwarded your question") ||
+                data.reply.includes("I'll ask our")
+            );
+        if (!isStillPending && data.reply) {
+            return data.reply; // Got an answer!
+        }
+        return null; // Still pending
+    } catch (err) {
+        console.error('Error checking question:', err);
+        return null;
+    }
+}
+// Poll for answers every 30 seconds
+async function pollForAnswers() {
+    loadPendingQuestions();
+    if (pendingQuestions.length === 0) {
+        return; // Nothing to check
+    }
+    // Check each pending question
+    for (const item of pendingQuestions) {
+        const answer = await checkQuestionAnswered(item.question);
+        if (answer) {
+            // Got an answer! Show notification
+            addMessage(`✅ <strong>Update on your question:</strong> "${item.question}"`, false);
+            addMessage(answer, false);
+            // Remove from pending
+            removePendingQuestion(item.question);
+        }
+    }
+    // Clean up old pending questions (older than 24 hours)
+    const now = Date.now();
+    const dayAgo = 24 * 60 * 60 * 1000;
+    pendingQuestions = pendingQuestions.filter(q => (now - q.timestamp) < dayAgo);
+    savePendingQuestions();
+}
+// Start polling interval
+function startPollingForAnswers() {
+    // Poll every 30 seconds
+    pollingInterval = setInterval(pollForAnswers, 30000);
+    // Also poll once immediately after 5 seconds
+    setTimeout(pollForAnswers, 5000);
+}
+// Track when customer asks a question that gets "pending" response
+const originalAddMessage = addMessage;
+addMessage = function(content, isUser = false) {
+    // Call original function
+    originalAddMessage(content, isUser);
+    // If bot response contains "forwarded" or "not sure", track as pending
+    if (!isUser && content && (
+        content.includes("I'm not sure") ||
+        content.includes("forwarded your question") ||
+        content.includes("I'll ask our")
+    )) {
+        // Get the last user message from chat history
+        const messages = document.getElementById('chatbotMessages');
+        const userMessages = messages.querySelectorAll('.message-user .message-content');
+        if (userMessages.length > 0) {
+            const lastUserMessage = userMessages[userMessages.length - 1].textContent;
+            addPendingQuestion(lastUserMessage);
+        }
+    }
+};
+// Real-time updates (SSE) disabled for Render deployment
+// Render free tier doesn't maintain persistent connections well
+// Future: Consider using polling or WebSockets for real-time features
+/*
+const eventSource = new EventSource('http://127.0.0.1:5000/stream');
+eventSource.onmessage = function(event) {
+    const data = event.data;
+    if (data) {
+        addMessage(data.replace(/\n/g, '<br>'), false);
+    }
+};
+eventSource.onerror = function(err) {
+    console.error("SSE connection lost:", err);
+};
+*/
+</script>
