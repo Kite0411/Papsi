@@ -1,579 +1,423 @@
+Chatbot-ui
 <?php
-/**
- * Papsi Repair Shop - Chatbot UI with Real-time Admin Replies
- */
+// Chatbot UI Component - Vehicle Diagnostic Assistant
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Papsi Repair Shop - AI Assistant</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .chat-container {
-            width: 100%;
-            max-width: 800px;
-            height: 80vh;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .chat-header {
-            background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: white;
-            padding: 20px;
-            text-align: center;
-            position: relative;
-        }
-
-        .chat-header h1 {
-            font-size: 1.5em;
-            margin-bottom: 5px;
-        }
-
-        .chat-header p {
-            opacity: 0.8;
-            font-size: 0.9em;
-        }
-
-        .status-indicator {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.8em;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #2ecc71;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #f8f9fa;
-        }
-
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message.user {
-            flex-direction: row-reverse;
-        }
-
-        .avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: white;
-            flex-shrink: 0;
-        }
-
-        .user .avatar {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-        }
-
-        .bot .avatar {
-            background: linear-gradient(135deg, #2ecc71, #27ae60);
-        }
-
-        .admin .avatar {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-        }
-
-        .message-content {
-            max-width: 70%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            line-height: 1.4;
-        }
-
-        .user .message-content {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .bot .message-content {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-bottom-left-radius: 4px;
-        }
-
-        .admin .message-content {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-            color: white;
-            border-bottom-left-radius: 4px;
-        }
-
-        .chat-input-container {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #e0e0e0;
-        }
-
-        .chat-input-form {
-            display: flex;
-            gap: 10px;
-        }
-
-        .chat-input {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            outline: none;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .chat-input:focus {
-            border-color: #667eea;
-        }
-
-        .send-button {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: transform 0.2s;
-        }
-
-        .send-button:hover {
-            transform: translateY(-2px);
-        }
-
-        .send-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .typing-indicator {
-            display: none;
-            padding: 12px 16px;
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 18px;
-            border-bottom-left-radius: 4px;
-            margin-bottom: 15px;
-            align-items: center;
-            gap: 8px;
-            max-width: 70%;
-        }
-
-        .typing-dots {
-            display: flex;
-            gap: 4px;
-        }
-
-        .typing-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #999;
-            animation: typing 1.4s infinite;
-        }
-
-        .typing-dot:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-
-        .typing-dot:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-
-        @keyframes typing {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-4px); }
-        }
-
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #2ecc71;
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 10000;
-            transform: translateX(400px);
-            transition: transform 0.3s ease;
-        }
-
-        .notification.show {
-            transform: translateX(0);
-        }
-
-        .service-card {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 12px;
-            padding: 15px;
-            margin: 10px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .service-name {
-            font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-
-        .service-desc {
-            color: #666;
-            margin-bottom: 8px;
-            font-size: 0.9em;
-        }
-
-        .service-meta {
-            display: flex;
-            gap: 15px;
-            font-size: 0.85em;
-            color: #888;
-        }
-
-        @media (max-width: 768px) {
-            .chat-container {
-                height: 90vh;
-                border-radius: 15px;
-            }
-            
-            .message-content {
-                max-width: 85%;
-            }
-            
-            .chat-header h1 {
-                font-size: 1.3em;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <h1>🔧 Papsi Repair Shop</h1>
-            <p>AI Assistant - How can I help with your vehicle today?</p>
-            <div class="status-indicator">
-                <div class="status-dot"></div>
-                <span>Real-time Active</span>
-            </div>
-        </div>
-
-        <div class="chat-messages" id="chatMessages">
-            <div class="message bot">
-                <div class="avatar">🤖</div>
-                <div class="message-content">
-                    Hello! I'm your Papsi Repair Assistant. I can help you with:
-                    <br>• Vehicle diagnostics & repairs
-                    <br>• Service recommendations  
-                    <br>• Pricing & duration estimates
-                    <br>• Technical advice
-                    <br><br>What seems to be the issue with your vehicle?
+<style>
+/* (styles unchanged from your original, kept compact here) */
+.chatbot-container{position:fixed;bottom:20px;right:20px;width:350px;max-width:calc(100vw - 40px);background:#fff;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.2);z-index:9999;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;transition:all .3s ease;overflow:hidden}
+.chatbot-header{background:linear-gradient(135deg,#DC143C,#B71C1C);color:#fff;padding:15px 20px;border-radius:15px 15px 0 0;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.chatbot-header h3{margin:0;font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
+.message-user .message-content{background:linear-gradient(135deg,#DC143C,#B71C1C);color:#fff;border-bottom-right-radius:4px}
+.message-bot .message-content{background:#fff;color:#333;border:1px solid #e0e0e0;border-bottom-left-radius:4px;white-space:pre-line}
+.message-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.message-user .message-avatar{background:#FFEBEE;color:#DC143C}
+.message-bot .message-avatar{background:#f0f0f0;color:#666}
+.chatbot-status{width:8px;height:8px;background:#4CAF50;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%{opacity:1}50%{opacity:.5}100%{opacity:1}}
+.chatbot-toggle{background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;transition:transform .3s}
+.chatbot-toggle:hover{transform:scale(1.1)}
+.chatbot-body{height:400px;display:flex;flex-direction:column;transition:all .3s}
+.chatbot-messages{flex:1;overflow-y:auto;padding:15px;background:#f8f9fa;max-height:300px}
+.chatbot-message{margin-bottom:12px;display:flex;align-items:flex-start;gap:8px;animation:fadeInUp .3s}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.message-user{justify-content:flex-end}
+.message-bot{justify-content:flex-start}
+.message-content{max-width:80%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.4;word-wrap:break-word}
+.chatbot-input{padding:15px;background:#fff;border-top:1px solid #e0e0e0;display:flex;gap:10px;align-items:center}
+.chatbot-input input{flex:1;border:1px solid #ddd;border-radius:20px;padding:10px 15px;font-size:14px;outline:none;transition:border-color .3s}
+.chatbot-input input:focus{border-color:#DC143C;box-shadow:0 0 0 2px rgba(220,20,60,.1)}
+.chatbot-send{background:linear-gradient(135deg,#DC143C,#B71C1C);color:#fff;border:none;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .3s;font-size:16px}
+.chatbot-send:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(220,20,60,.3)}
+.chatbot-send:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.chatbot-typing{display:none;padding:10px 15px;color:#666;font-style:italic;font-size:13px}
+.chatbot-minimized {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #DC143C, #B71C1C);
+  box-shadow: 0 6px 20px rgba(220, 20, 60, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 26px;
+  transition: all .3s ease;
+}
+.chatbot-minimized .chatbot-body{display:none}
+.chatbot-welcome{text-align:center;padding:20px;color:#666}
+.chatbot-welcome h4{margin:0 0 10px 0;color:#333}
+.chatbot-welcome p{margin:0 0 15px 0;font-size:13px}
+.quick-questions{margin-top:15px;display:flex;flex-wrap:wrap;gap:8px}
+.quick-question{background:#FFEBEE;color:#DC143C;border:1px solid #DC143C;border-radius:15px;padding:5px 12px;font-size:12px;cursor:pointer;transition:all .3s}
+.quick-question:hover{background:#DC143C;color:#fff}
+@media(max-width:768px){.chatbot-container{width:calc(100vw - 20px);right:10px;bottom:10px}.chatbot-body{height:350px}.chatbot-messages{max-height:250px}}
+.typing-indicator{display:flex;gap:4px;padding:10px 15px}
+.typing-dot{width:8px;height:8px;background:#ccc;border-radius:50%;animation:typing 1.4s infinite ease-in-out}
+.typing-dot:nth-child(1){animation-delay:-.32s}
+.typing-dot:nth-child(2){animation-delay:-.16s}
+@keyframes typing{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1);opacity:1}}
+</style>
+<div id="chatbot" class="chatbot-container" aria-live="polite">
+    <div class="chatbot-icon" id="chatbotIcon" style="
+    display:none;
+    position:fixed;
+    bottom:20px;
+    right:20px;
+    width:60px;
+    height:60px;
+    border-radius:50%;
+    background:linear-gradient(135deg,#DC143C,#B71C1C);
+    box-shadow:0 6px 20px rgba(220,20,60,0.4);
+    align-items:center;
+    justify-content:center;
+    color:#fff;
+    font-size:28px;
+    cursor:pointer;
+    z-index:9999;
+    " onclick="toggleChatbot()">💬</div>
+    <div class="chatbot-header" onclick="toggleChatbot()" role="button" aria-expanded="true">
+        <h3>
+            <span class="chatbot-status" id="chatbotStatus" title="Online"></span>
+           
+        </h3>
+        <button class="chatbot-toggle" id="chatbotToggle" aria-label="Minimize chatbot">-</button>
+    </div>
+   
+    <div class="chatbot-body" id="chatbotBody">
+        <div class="chatbot-messages" id="chatbotMessages">
+            <div class="chatbot-welcome" id="chatbotWelcome">
+                <h4>🔧 Vehicle Diagnostic Assistant</h4>
+                <p>Describe your vehicle problem and I'll recommend the right service for you!</p>
+                <div class="quick-questions">
+                    <div class="quick-question" onclick="askQuestion('My engine is making a strange noise')">Engine Noise</div>
+                    <div class="quick-question" onclick="askQuestion('My brakes are squeaking')">Brake Issues</div>
+                    <div class="quick-question" onclick="askQuestion('My AC is not cooling')">AC Problems</div>
+                <div class="quick-question" onclick="askQuestion('My car won\\'t start')">Starting Issues</div>
                 </div>
             </div>
         </div>
-
-        <div class="typing-indicator" id="typingIndicator">
-            <div class="typing-dots">
+       
+        <div class="chatbot-typing" id="chatbotTyping" aria-hidden="true">
+            <div class="typing-indicator">
                 <div class="typing-dot"></div>
                 <div class="typing-dot"></div>
                 <div class="typing-dot"></div>
             </div>
-            <span>Papsi Assistant is typing...</span>
         </div>
-
-        <div class="chat-input-container">
-            <form class="chat-input-form" id="chatForm">
-                <input 
-                    type="text" 
-                    class="chat-input" 
-                    id="messageInput"
-                    placeholder="Describe your vehicle problem (e.g., 'My car is making noise when braking')"
-                    autocomplete="off"
-                >
-                <button type="submit" class="send-button" id="sendButton">
-                    Send
-                </button>
-            </form>
+       
+        <div class="chatbot-input">
+            <input type="text" id="chatbotInput" placeholder="Describe your vehicle problem..." maxlength="500" aria-label="Chat input">
+            <button class="chatbot-send" id="chatbotSend" onclick="sendChatbotMessage()" aria-label="Send message">➤</button>
         </div>
     </div>
-
-    <script>
-        // SSE Listener for real-time admin replies
-        function setupSSEListener() {
-            const eventSource = new EventSource('/stream');
-            
-            eventSource.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    const notification = JSON.parse(data.message);
-                    
-                    console.log('SSE received:', notification);
-                    
-                    if (notification.type === 'admin_reply') {
-                        showAdminReply(notification);
-                        showNotification('🎉 Admin has replied to your question!');
-                    }
-                } catch (e) {
-                    console.log('SSE raw message:', event.data);
-                }
-            };
-            
-            eventSource.onerror = function(event) {
-                console.error('SSE error:', event);
-                // Attempt to reconnect after 5 seconds
-                setTimeout(setupSSEListener, 5000);
-            };
-            
-            return eventSource;
-        }
-
-        function showAdminReply(notification) {
-            const chatMessages = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message admin';
-            messageDiv.innerHTML = `
-                <div class="avatar">👨‍🔧</div>
-                <div class="message-content">
-                    <strong>Admin Response:</strong><br>
-                    ${notification.admin_answer}
-                </div>
-            `;
-            chatMessages.appendChild(messageDiv);
-            scrollToBottom();
-        }
-
-        function showNotification(message) {
-            // Remove existing notification
-            const existingNotification = document.querySelector('.notification');
-            if (existingNotification) {
-                existingNotification.remove();
-            }
-
-            const notification = document.createElement('div');
-            notification.className = 'notification';
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            // Animate in
-            setTimeout(() => notification.classList.add('show'), 100);
-
-            // Remove after 5 seconds
-            setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 5000);
-        }
-
-        // Store user's pending questions
-        function storePendingQuestion(question) {
-            const pendingQuestions = JSON.parse(localStorage.getItem('pendingQuestions') || '[]');
-            if (!pendingQuestions.includes(question)) {
-                pendingQuestions.push(question);
-                localStorage.setItem('pendingQuestions', JSON.stringify(pendingQuestions));
-            }
-        }
-
-        // Chat functionality
-        document.getElementById('chatForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            const sendButton = document.getElementById('sendButton');
-            
-            if (!message) return;
-            
-            // Add user message to chat
-            addMessageToChat('user', message);
-            input.value = '';
-            sendButton.disabled = true;
-            
-            // Show typing indicator
-            showTypingIndicator();
-            
-            try {
-                const response = await fetch('chat_proxy.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: message })
-                });
-                
-                const data = await response.json();
-                
-                // Hide typing indicator
-                hideTypingIndicator();
-                
-                if (data.reply) {
-                    addMessageToChat('bot', data.reply);
-                    
-                    // If the response indicates forwarding to admin, store the question
-                    if (data.reply.includes('forwarded your question to our admin') || 
-                        data.reply.includes('already being reviewed')) {
-                        storePendingQuestion(message);
-                    }
-                } else {
-                    addMessageToChat('bot', 'Sorry, I encountered an error. Please try again.');
-                }
-                
-            } catch (error) {
-                console.error('Error:', error);
-                hideTypingIndicator();
-                addMessageToChat('bot', 'Sorry, I'm having connection issues. Please try again.');
-            }
-            
-            sendButton.disabled = false;
-            input.focus();
+</div>
+<script>
+/*
+  Frontend adapted for Flask backend at:
+  http://127.0.0.1:5000/chat
+  - Uses POST JSON { message }
+  - Expects JSON { reply }
+  - Includes timeout and better error handling
+*/
+const API_URL = '/chatbot/chat_proxy.php'; // must match your Flask address
+let chatbotMinimized = true;
+let isTyping = false;
+let welcomeShown = false;
+function toggleChatbot() {
+    const chatbot = document.getElementById('chatbot');
+    const toggle = document.getElementById('chatbotToggle');
+    const body = document.getElementById('chatbotBody');
+    const status = document.getElementById('chatbotStatus'); // 🟢 green dot
+    const icon = document.getElementById('chatbotIcon'); // 💬 circle icon
+    chatbotMinimized = !chatbotMinimized;
+   
+    if (chatbotMinimized) {
+        chatbot.classList.add('chatbot-minimized');
+        toggle.textContent = '';
+        body.style.display = 'none';
+        icon.style.display = 'flex'; // 💬 show circle icon
+        status.style.display = 'none'; // hide green dot
+        toggle.setAttribute('aria-expanded', 'false');
+    } else {
+        chatbot.classList.remove('chatbot-minimized');
+        toggle.textContent = '−';
+        body.style.display = 'flex';
+        icon.style.display = 'none'; // hide circle icon
+        status.style.display = 'inline-block'; // show green dot again
+        toggle.setAttribute('aria-expanded', 'true');
+        document.getElementById('chatbotInput').focus();
+    }
+}
+function showTyping() {
+    if (isTyping) return;
+    isTyping = true;
+    const typing = document.getElementById('chatbotTyping');
+    typing.style.display = 'block';
+    typing.setAttribute('aria-hidden', 'false');
+    scrollToBottom();
+}
+function hideTyping() {
+    isTyping = false;
+    const typing = document.getElementById('chatbotTyping');
+    typing.style.display = 'none';
+    typing.setAttribute('aria-hidden', 'true');
+}
+function addMessage(content, isUser = false) {
+    const messages = document.getElementById('chatbotMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chatbot-message ${isUser ? 'message-user' : 'message-bot'}`;
+   
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.textContent = isUser ? '👤' : '🔧';
+   
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+   
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(messageContent);
+   
+    // Remove welcome message if it exists
+    const welcome = document.getElementById('chatbotWelcome');
+    if (welcome) welcome.remove();
+   
+    messages.appendChild(messageDiv);
+    scrollToBottom();
+}
+// simple escaping to avoid raw HTML injection
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, function(m) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    });
+}
+function scrollToBottom() {
+    const messages = document.getElementById('chatbotMessages');
+    setTimeout(() => messages.scrollTop = messages.scrollHeight, 80);
+}
+function askQuestion(question) {
+    const input = document.getElementById('chatbotInput');
+    input.value = question;
+    sendChatbotMessage();
+}
+async function sendChatbotMessage() {
+    const input = document.getElementById('chatbotInput');
+    const sendBtn = document.getElementById('chatbotSend');
+    const message = input.value.trim();
+   
+    if (!message || isTyping) return;
+   
+    // Disable input and button
+    input.disabled = true;
+    sendBtn.disabled = true;
+   
+    // Add user message
+    addMessage(message, true);
+    input.value = '';
+   
+    // Show typing indicator
+    showTyping();
+   
+    // Use AbortController to implement a timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+   
+    try {
+        const resp = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+            signal: controller.signal
         });
-
-        function addMessageToChat(sender, message) {
-            const chatMessages = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}`;
-            
-            const avatar = sender === 'user' ? '👤' : sender === 'admin' ? '👨‍🔧' : '🤖';
-            
-            // Format message with service cards
-            let formattedMessage = message;
-            if (sender === 'bot') {
-                formattedMessage = formatBotMessage(message);
-            }
-            
-            messageDiv.innerHTML = `
-                <div class="avatar">${avatar}</div>
-                <div class="message-content">${formattedMessage}</div>
-            `;
-            
-            chatMessages.appendChild(messageDiv);
-            scrollToBottom();
+       
+        clearTimeout(timeout);
+       
+        if (!resp.ok) {
+            // Try to read server error message if available
+            let text = await resp.text().catch(()=>null);
+            hideTyping();
+            addMessage(`Sorry, server returned ${resp.status}. ${text ? 'Details: '+text : ''}`, false);
+            return;
         }
-
-        function formatBotMessage(message) {
-            // Convert markdown-style formatting
-            let formatted = message
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>');
-            
-            // Convert service listings to cards
-            if (message.includes('• **') && message.includes('₱')) {
-                const serviceBlocks = message.split('• **').slice(1);
-                let cardsHTML = '';
-                
-                serviceBlocks.forEach(block => {
-                    const lines = block.split('\n');
-                    const name = lines[0].replace('**', '');
-                    let desc = '', duration = '', price = '';
-                    
-                    lines.forEach(line => {
-                        if (line.includes('📝')) desc = line.replace('📝', '').trim();
-                        if (line.includes('🕒')) duration = line.replace('🕒 Duration:', '').trim();
-                        if (line.includes('💰')) price = line.replace('💰 Price:', '').trim();
-                    });
-                    
-                    cardsHTML += `
-                        <div class="service-card">
-                            <div class="service-name">${name}</div>
-                            <div class="service-desc">${desc}</div>
-                            <div class="service-meta">
-                                <span>${duration}</span>
-                                <span>${price}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                formatted = cardsHTML;
-            }
-            
-            return formatted.replace(/\n/g, '<br>');
+       
+        // parse JSON safely
+        const data = await resp.json().catch(() => null);
+        hideTyping();
+       
+        if (data && data.reply) {
+            addMessage(data.reply, false);
+        } else {
+            addMessage('Sorry, I encountered an unexpected response from the server.', false);
+            console.error('Unexpected server response:', data);
         }
-
-        function showTypingIndicator() {
-            document.getElementById('typingIndicator').style.display = 'flex';
-            scrollToBottom();
+       
+    } catch (err) {
+        hideTyping();
+        if (err.name === 'AbortError') {
+            addMessage('Sorry, the request timed out. The model may be busy or the server is not responding.', false);
+        } else {
+            addMessage('Sorry, I\'m having trouble connecting to the chatbot server. Please try again in a moment', false);
+            console.error('Chatbot error:', err);
         }
-
-        function hideTypingIndicator() {
-            document.getElementById('typingIndicator').style.display = 'none';
+    } finally {
+        // Re-enable input and button
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
+    }
+}
+// keyboard support
+document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatbotMessage();
+    }
+});
+// autofocus behavior
+document.getElementById('chatbotInput').addEventListener('focus', function() {
+    if (chatbotMinimized) toggleChatbot();
+});
+// initial welcome message on page load (only once)
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        const messages = document.getElementById('chatbotMessages');
+        if (messages.children.length === 1 && welcomeShown) {
+            addMessage("Hi! I'm your vehicle diagnostic assistant. Describe your car problem and I'll recommend the right service for you!", false);
+            welcomeShown = false;
         }
-
-        function scrollToBottom() {
-            const chatMessages = document.getElementById('chatMessages');
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+    }, 600);
+    // Start polling for answers to pending questions
+    startPollingForAnswers();
+});
+// ==================== POLLING FOR ADMIN ANSWERS ====================
+let pollingInterval = null;
+let pendingQuestions = [];
+// Load pending questions from localStorage
+function loadPendingQuestions() {
+    const stored = localStorage.getItem('chatbot_pending_questions');
+    if (stored) {
+        try {
+            pendingQuestions = JSON.parse(stored);
+        } catch (e) {
+            pendingQuestions = [];
         }
-
-        // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            // Start listening for admin replies
-            setupSSEListener();
-            
-            // Focus on input
-            document.getElementById('messageInput').focus();
-            
-            // Load any pending questions from localStorage
-            const pendingQuestions = JSON.parse(localStorage.getItem('pendingQuestions') || '[]');
-            if (pendingQuestions.length > 0) {
-                console.log('Pending questions:', pendingQuestions);
-            }
+    }
+}
+// Save pending questions to localStorage
+function savePendingQuestions() {
+    localStorage.setItem('chatbot_pending_questions', JSON.stringify(pendingQuestions));
+}
+// Add question to pending list
+function addPendingQuestion(question) {
+    loadPendingQuestions();
+    // Don't add duplicates
+    if (!pendingQuestions.find(q => q.question === question)) {
+        pendingQuestions.push({
+            question: question,
+            timestamp: Date.now()
         });
-    </script>
-</body>
-</html>
+        savePendingQuestions();
+    }
+}
+// Remove question from pending list
+function removePendingQuestion(question) {
+    loadPendingQuestions();
+    pendingQuestions = pendingQuestions.filter(q => q.question !== question);
+    savePendingQuestions();
+}
+// Check if a question now has an answer
+async function checkQuestionAnswered(question) {
+    try {
+        const resp = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: question })
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        // Check if response contains "I'm not sure" or "forwarded" (unanswered)
+        const isStillPending =
+            data.reply && (
+                data.reply.includes("I'm not sure") ||
+                data.reply.includes("forwarded your question") ||
+                data.reply.includes("I'll ask our")
+            );
+        if (!isStillPending && data.reply) {
+            return data.reply; // Got an answer!
+        }
+        return null; // Still pending
+    } catch (err) {
+        console.error('Error checking question:', err);
+        return null;
+    }
+}
+// Poll for answers every 30 seconds
+async function pollForAnswers() {
+    loadPendingQuestions();
+    if (pendingQuestions.length === 0) {
+        return; // Nothing to check
+    }
+    // Check each pending question
+    for (const item of pendingQuestions) {
+        const answer = await checkQuestionAnswered(item.question);
+        if (answer) {
+            // Got an answer! Show notification
+            addMessage(`✅ <strong>Update on your question:</strong> "${item.question}"`, false);
+            addMessage(answer, false);
+            // Remove from pending
+            removePendingQuestion(item.question);
+        }
+    }
+    // Clean up old pending questions (older than 24 hours)
+    const now = Date.now();
+    const dayAgo = 24 * 60 * 60 * 1000;
+    pendingQuestions = pendingQuestions.filter(q => (now - q.timestamp) < dayAgo);
+    savePendingQuestions();
+}
+// Start polling interval
+function startPollingForAnswers() {
+    // Poll every 30 seconds
+    pollingInterval = setInterval(pollForAnswers, 30000);
+    // Also poll once immediately after 5 seconds
+    setTimeout(pollForAnswers, 5000);
+}
+// Track when customer asks a question that gets "pending" response
+const originalAddMessage = addMessage;
+addMessage = function(content, isUser = false) {
+    // Call original function
+    originalAddMessage(content, isUser);
+    // If bot response contains "forwarded" or "not sure", track as pending
+    if (!isUser && content && (
+        content.includes("I'm not sure") ||
+        content.includes("forwarded your question") ||
+        content.includes("I'll ask our")
+    )) {
+        // Get the last user message from chat history
+        const messages = document.getElementById('chatbotMessages');
+        const userMessages = messages.querySelectorAll('.message-user .message-content');
+        if (userMessages.length > 0) {
+            const lastUserMessage = userMessages[userMessages.length - 1].textContent;
+            addPendingQuestion(lastUserMessage);
+        }
+    }
+};
+// Real-time updates (SSE) disabled for Render deployment
+// Render free tier doesn't maintain persistent connections well
+// Future: Consider using polling or WebSockets for real-time features
+/*
+const eventSource = new EventSource('http://127.0.0.1:5000/stream');
+eventSource.onmessage = function(event) {
+    const data = event.data;
+    if (data) {
+        addMessage(data.replace(/\n/g, '<br>'), false);
+    }
+};
+eventSource.onerror = function(err) {
+    console.error("SSE connection lost:", err);
+};
+*/
+</script>
