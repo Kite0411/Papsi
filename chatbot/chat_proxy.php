@@ -27,7 +27,7 @@ if (empty($userMessage)) {
 }
 // ==================== RENDER API CONFIGURATION ====================
 // 🔥 CRITICAL: Your actual Render service URL
-$RENDER_API_URL = "https://papsi-chatbot-api.onrender.com/chat";
+$RENDER_API_URL = "https://papsi-chatbot-api-n8pw.onrender.com/chat";
 // Log the request (for debugging)
 $logFile = __DIR__ . '/chat_proxy.log';
 $logMessage = date('Y-m-d H:i:s') . " - User Message: $userMessage\n";
