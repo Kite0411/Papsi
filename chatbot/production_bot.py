@@ -446,7 +446,7 @@ def get_next_question():
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
-    """Admin chatbot endpoint - FIXED TO SAVE CORRECTLY"""
+    """Admin chatbot endpoint - FIXED VERSION"""
     global current_question
     try:
         data = request.get_json()
@@ -470,35 +470,55 @@ def admin_chat():
         print(f"💾 Saving to FAQ: '{question}' -> '{answer}'")
 
         try:
-            # Read existing FAQ
+            # Read existing FAQ or create new one
             if FAQ_FILE.exists():
                 faq = pd.read_csv(FAQ_FILE)
                 print(f"📊 Current FAQ has {len(faq)} entries")
+                print(f"📋 Current FAQ columns: {faq.columns.tolist()}")
             else:
                 faq = pd.DataFrame(columns=['question', 'answer'])
+                print("📋 Created new FAQ DataFrame")
+
+            # Debug: Check current data
+            print(f"🔍 Before adding - FAQ shape: {faq.shape}")
             
-            # Remove duplicate if exists
-            faq = faq[faq['question'] != question]
+            # Remove any existing entry with same question
+            before_count = len(faq)
+            faq = faq[faq['question'].astype(str).str.strip() != question.strip()]
+            after_count = len(faq)
+            print(f"🔄 Removed {before_count - after_count} duplicate entries")
+
+            # Add new entry - FIXED: Ensure proper DataFrame creation
+            new_data = {'question': question, 'answer': answer}
+            new_row = pd.DataFrame([new_data])  # Create as list of dict
             
-            # Add new entry (2 COLUMNS ONLY: question, answer)
-            new_row = pd.DataFrame({
-                'question': [question], 
-                'answer': [answer]
-            })
-            
+            # Concatenate properly
             faq = pd.concat([faq, new_row], ignore_index=True)
-            
-            # Save to CSV
+            print(f"📥 Added new row, FAQ now has {len(faq)} entries")
+
+            # Save to CSV - FIXED: Ensure proper saving
             faq.to_csv(FAQ_FILE, index=False)
-            print(f"✅ SAVED TO FAQ: {question} -> {answer}")
-            
-            # Verify it was saved
-            verify = pd.read_csv(FAQ_FILE)
-            print(f"✅ Verified: FAQ now has {len(verify)} entries")
-            
+            print(f"💾 SAVED TO FAQ FILE: {FAQ_FILE}")
+
+            # VERIFY: Read back to confirm
+            try:
+                verify_faq = pd.read_csv(FAQ_FILE)
+                print(f"✅ VERIFICATION: FAQ file now has {len(verify_faq)} entries")
+                
+                # Check if our new entry is there
+                new_entry_exists = verify_faq['question'].astype(str).str.contains(question, regex=False).any()
+                if new_entry_exists:
+                    print(f"✅ CONFIRMED: New entry saved successfully!")
+                else:
+                    print(f"❌ WARNING: New entry not found in verification!")
+                    
+            except Exception as verify_error:
+                print(f"❌ VERIFICATION FAILED: {verify_error}")
+
         except Exception as e:
             print(f"❌ FAQ SAVE ERROR: {e}")
             traceback.print_exc()
+            return jsonify({'reply': f'Error saving to FAQ: {str(e)}'}), 500
 
         # Track for customer polling
         save_answered_question(question, answer)
@@ -513,9 +533,9 @@ def admin_chat():
         if questions:
             next_q = questions[0]
             current_question = next_q
-            reply = f"✅ Answer saved!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
+            reply = f"✅ Answer saved to FAQ!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
         else:
-            reply = "✅ Answer saved! No more pending questions."
+            reply = "✅ Answer saved to FAQ! No more pending questions."
 
         return jsonify({'reply': reply})
         
@@ -523,20 +543,6 @@ def admin_chat():
         print(f"💥 Admin chat error: {e}")
         traceback.print_exc()
         return jsonify({'reply': 'Error processing request.'}), 500
-
-@app.route('/check_answer/<path:question>', methods=['GET'])
-def check_answer(question):
-    """Endpoint for customer to check if their question was answered"""
-    answer = check_for_answer(question)
-    
-    if answer:
-        return jsonify({
-            'answered': True,
-            'answer': answer
-        })
-    else:
-        return jsonify({'answered': False})
-
 # ==================== RUN ====================
 
 if __name__ == '__main__':
