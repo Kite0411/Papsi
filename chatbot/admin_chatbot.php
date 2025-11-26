@@ -79,12 +79,13 @@
 </div>
 <script>
 // 🔥 FIXED: Auto-fetch without requiring chat first
-const API_URL = 'https://papsi-chatbot-api.onrender.com/admin_chat';
-const POLL_URL = 'https://papsi-chatbot-api.onrender.com/get_next_question';
-const PENDING_URL = 'https://papsi-chatbot-api.onrender.com/pending';
+const API_URL = 'https://papsi-chatbot-api-n8pw.onrender.com/admin_chat';
+const POLL_URL = 'https://papsi-chatbot-api-n8pw.onrender.com/get_next_question';
+const PENDING_URL = 'https://papsi-chatbot-api-n8pw.onrender.com/pending';
 
 let currentQuestion = null;
 let isFirstLoad = true;
+    
 
 // Display message in chat
 function addMessage(content, isUser = false) {
