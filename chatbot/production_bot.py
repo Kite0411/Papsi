@@ -1,21 +1,17 @@
 """
 Papsi Repair Shop - Complete Chatbot API 
-FIXED VERSION - Admin replies now reach customers via SSE
+FIXED VERSION - Admin replies now saved correctly and customers see updates
 """
 
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import os
 import mysql.connector
-from queue import Queue
-import threading
 from pathlib import Path
 from dotenv import load_dotenv
-import json
 import re
 import traceback
-import gc
 import time
 
 load_dotenv()
@@ -39,39 +35,43 @@ DB_CONFIG = {
     'port': int(os.environ.get('DB_PORT', 3306))
 }
 
-# ==================== CORRECTED FILE PATHS ====================
+# ==================== FILE PATHS ====================
 
 CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
 
-# CORRECTED: FAQ is in the root directory
+# FAQ is in the root directory with 2 columns: question, answer
 FAQ_FILE = ROOT_DIR / 'faq.csv'
 PENDING_FILE = CURRENT_DIR / 'pending_questions.csv'
+ANSWERED_FILE = CURRENT_DIR / 'answered_questions.json'  # NEW: Track answered questions
 
-print(f"📁 Looking for FAQ at: {FAQ_FILE}")
+print(f"📁 FAQ File: {FAQ_FILE}")
+print(f"📁 Pending File: {PENDING_FILE}")
 
-# Initialize files with YOUR 3-COLUMN FAQ
+# Initialize files
 def initialize_files():
     try:
-        # Check if FAQ file exists and has content
+        # Check FAQ file
         if FAQ_FILE.exists():
             faq_data = pd.read_csv(FAQ_FILE)
-            print(f"✅ FOUND YOUR 3-COLUMN FAQ FILE: {len(faq_data)} entries")
+            print(f"✅ FAQ loaded: {len(faq_data)} entries")
             print(f"📊 FAQ Columns: {faq_data.columns.tolist()}")
-            
-            # Show what's in your FAQ
-            print("📝 SAMPLE FAQ CONTENT:")
-            for i, (idx, row) in enumerate(faq_data.iterrows()):
-                if i < 3:  # Show first 3
-                    print(f"   {i+1}. Q: {row['question']}")
-                    print(f"      A: {row['answer'][:80]}...")
         else:
-            print(f"❌ FAQ file not found at: {FAQ_FILE}")
+            # Create with 2 columns only
+            pd.DataFrame(columns=['question', 'answer']).to_csv(FAQ_FILE, index=False)
+            print("✅ Created new FAQ file (2 columns)")
             
         # Initialize pending file
         if not PENDING_FILE.exists():
             pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
             print("✅ Created pending questions file")
+            
+        # Initialize answered tracking file
+        if not Path(ANSWERED_FILE).exists():
+            import json
+            with open(ANSWERED_FILE, 'w') as f:
+                json.dump({}, f)
+            print("✅ Created answered tracking file")
         
     except Exception as e:
         print(f"❌ File initialization error: {e}")
@@ -79,73 +79,23 @@ def initialize_files():
 
 initialize_files()
 
-# ==================== IMPROVED SSE IMPLEMENTATION ====================
-
-class ClientQueue:
-    def __init__(self):
-        self.queue = Queue()
-        self.last_activity = time.time()
-
-clients = {}  # Store by session_id or user_id
-
-def send_sse_message(data, target_user_id=None):
-    """Send SSE message to specific user or all users"""
-    if target_user_id and target_user_id in clients:
-        try:
-            clients[target_user_id].queue.put(data, timeout=0.2)
-            print(f"✅ SSE sent to user {target_user_id}: {data[:100]}...")
-        except Exception as e:
-            print(f"❌ SSE error for user {target_user_id}: {e}")
-            clients.pop(target_user_id, None)
-    else:
-        # Broadcast to all (for admin notifications)
-        for user_id, client in list(clients.items()):
-            try:
-                client.queue.put(data, timeout=0.2)
-                print(f"✅ SSE broadcast to user {user_id}")
-            except Exception:
-                clients.pop(user_id, None)
-
-def cleanup_clients():
-    """Clean up inactive clients periodically"""
-    while True:
-        time.sleep(60)  # Check every minute
-        current_time = time.time()
-        inactive_users = [
-            user_id for user_id, client in clients.items()
-            if current_time - client.last_activity > 300  # 5 minutes
-        ]
-        for user_id in inactive_users:
-            clients.pop(user_id, None)
-            print(f"🧹 Cleaned up inactive client: {user_id}")
-
-# Start cleanup thread
-cleanup_thread = threading.Thread(target=cleanup_clients, daemon=True)
-cleanup_thread.start()
-
-# ==================== OPTIMIZED FAQ SEARCH FOR YOUR DATA ====================
+# ==================== TEXT PROCESSING ====================
 
 def preprocess_text(text):
-    """Clean and preprocess text for better matching"""
+    """Clean and preprocess text"""
     if not isinstance(text, str):
         return ""
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    text = re.sub(r'[^\w\s]', '', text)
     return text
 
 def smart_faq_search(user_message, faq_data):
-    """
-    Smart FAQ search optimized for your 3-column FAQ data
-    """
+    """Smart FAQ search with keyword matching"""
     print(f"🔍 Searching FAQ for: '{user_message}'")
     
     user_clean = preprocess_text(user_message)
     user_words = set(user_clean.split())
-    
-    # Remove very short words but keep important ones
     user_words = {word for word in user_words if len(word) > 2}
-    
-    print(f"🔑 User words: {user_words}")
     
     if not user_words:
         return None, 0
@@ -155,7 +105,6 @@ def smart_faq_search(user_message, faq_data):
     best_question = None
     
     for idx, row in faq_data.iterrows():
-        # Handle your 3-column format: question, answer, follow_up
         question = str(row['question'])
         answer = str(row['answer'])
         question_clean = preprocess_text(question)
@@ -166,127 +115,49 @@ def smart_faq_search(user_message, faq_data):
         if not common_words:
             continue
             
-        # STRATEGY 1: Word overlap score
+        # Word overlap score
         score = len(common_words) / len(user_words)
         
-        # STRATEGY 2: Exact phrase bonus (very important for your FAQ)
+        # Exact phrase bonus
         if user_clean in question_clean:
-            score += 1.0  # Higher bonus for exact matches
-            print(f"  ✅ Exact phrase match!")
+            score += 1.0
         
-        # STRATEGY 3: Important auto repair keywords bonus
-        important_auto_words = {
-            'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 'wheel', 
-            'ac', 'air', 'conditioning', 'transmission', 'suspension', 'check', 
-            'light', 'noise', 'smoke', 'leak', 'overheating', 'fuel', 'consumption',
-            'clutch', 'gear', 'shift', 'steering', 'power', 'loss', 'misfire',
-            'coolant', 'exhaust', 'catalytic', 'converter', 'abs', 'pump', 'hybrid'
+        # Important auto keywords bonus
+        important_words = {
+            'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 
+            'ac', 'air', 'conditioning', 'transmission', 'suspension', 'check'
         }
         
         for word in common_words:
-            if word in important_auto_words:
+            if word in important_words:
                 score += 0.3
-            elif len(word) > 4:
-                score += 0.1
         
-        # STRATEGY 4: Vehicle type matching
-        vehicle_types = {'car', 'truck', 'van', 'motorcycle', 'motorbike', 'suv', 'lorry', 'pickup', 'diesel'}
-        for vehicle in vehicle_types:
-            if vehicle in user_clean and vehicle in question_clean:
-                score += 0.2
-        
-        print(f"  📝 Checking: '{question}'")
-        print(f"  🔄 Common words: {common_words}")
-        print(f"  📊 Score: {score:.3f}")
-        
-        # VERY LOW THRESHOLD for better matching with your FAQ
-        if score > best_score and score > 0.08:  # Lowered threshold
+        if score > best_score and score > 0.08:
             best_score = score
             best_match = answer
             best_question = question
     
     if best_match:
-        print(f"🎯 BEST MATCH FOUND: '{best_question}' -> score: {best_score:.3f}")
-    else:
-        print(f"❌ NO MATCH FOUND (best score: {best_score:.3f})")
-        
+        print(f"🎯 Match found: '{best_question}' (score: {best_score:.3f})")
+    
     return best_match, best_score
-
-def smart_service_search(user_message, services):
-    """Smart service search"""
-    user_clean = preprocess_text(user_message)
-    user_words = [word for word in user_clean.split() if len(word) > 2]
-    
-    if not user_words:
-        return []
-        
-    matches = []
-    
-    # Common service keywords mapping based on your FAQ
-    service_keywords = {
-        'oil': ['oil change', 'oil service', 'lube', 'consumption'],
-        'brake': ['brake service', 'brake pad', 'brake repair', 'squeal', 'pedal'],
-        'engine': ['engine repair', 'engine diagnostic', 'tune up', 'overheating', 'misfire'],
-        'tire': ['tire rotation', 'tire service', 'wheel alignment', 'vibration'],
-        'ac': ['ac repair', 'air conditioning', 'ac service', 'cooling'],
-        'battery': ['battery replacement', 'battery service', 'dead', 'drains'],
-        'transmission': ['transmission service', 'transmission repair', 'gear', 'shift'],
-        'suspension': ['suspension repair', 'suspension service', 'noise'],
-        'electrical': ['electrical', 'light', 'flicker', 'dashboard'],
-        'exhaust': ['exhaust', 'catalytic', 'converter', 'smoke']
-    }
-    
-    for service in services:
-        name = preprocess_text(service['service_name'])
-        desc = preprocess_text(service['description'])
-        
-        score = 0
-        
-        # Basic keyword matching
-        for keyword in user_words:
-            if keyword in name:
-                score += 2.0
-            elif keyword in desc:
-                score += 1.0
-        
-        # Enhanced keyword matching using service categories
-        for category, keywords in service_keywords.items():
-            if any(cat_word in user_clean for cat_word in [category] + keywords):
-                if any(cat_word in name for cat_word in keywords):
-                    score += 3.0
-                elif any(cat_word in desc for cat_word in keywords):
-                    score += 2.0
-        
-        # Exact phrase bonus
-        if user_clean in name:
-            score += 4.0
-        elif user_clean in desc:
-            score += 3.0
-            
-        if score > 0.3:  # Lower threshold
-            matches.append((service, score))
-    
-    # Return top 3 matches
-    matches.sort(key=lambda x: x[1], reverse=True)
-    return matches[:3]
 
 # ==================== DATABASE ====================
 
 def get_db_connection():
-    """Get database connection with error handling"""
+    """Get database connection"""
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
         return conn
-    except mysql.connector.Error as e:
-        print(f"⚠️ DB connection error: {e}")
+    except Exception as e:
+        print(f"⚠️ DB error: {e}")
         return None
 
 def get_services_from_db():
-    """Get services from database with error handling"""
+    """Get services from database"""
     try:
         conn = get_db_connection()
         if not conn:
-            print("❌ No database connection")
             return []
             
         cursor = conn.cursor(dictionary=True)
@@ -295,50 +166,75 @@ def get_services_from_db():
         cursor.close()
         conn.close()
         
-        print(f"✅ Loaded {len(services)} services from database")
+        print(f"✅ Loaded {len(services)} services")
         return services
         
     except Exception as e:
         print(f"⚠️ Service query error: {e}")
         return []
 
+def smart_service_search(user_message, services):
+    """Search for matching services"""
+    user_clean = preprocess_text(user_message)
+    user_words = [word for word in user_clean.split() if len(word) > 2]
+    
+    if not user_words:
+        return []
+        
+    matches = []
+    
+    for service in services:
+        name = preprocess_text(service['service_name'])
+        desc = preprocess_text(service['description'])
+        
+        score = 0
+        
+        for keyword in user_words:
+            if keyword in name:
+                score += 2.0
+            elif keyword in desc:
+                score += 1.0
+        
+        if user_clean in name:
+            score += 4.0
+        elif user_clean in desc:
+            score += 3.0
+            
+        if score > 0.3:
+            matches.append((service, score))
+    
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return matches[:3]
+
 # ==================== PENDING QUESTIONS ====================
 
 def save_pending_question(question):
     """Save pending question"""
     try:
-        if not isinstance(question, str) or not question.strip():
-            return False
-            
         question_clean = question.strip()
         
-        # Read current pending questions
         if PENDING_FILE.exists():
             pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
         else:
             pending = pd.DataFrame(columns=['question'])
         
-        # Clean data
         pending = pending.dropna(subset=['question'])
         pending['question'] = pending['question'].astype(str).str.strip()
-        pending = pending[pending['question'] != '']
         
-        # Check for duplicates
+        # Check duplicates
         if question_clean in pending['question'].values:
-            print(f"⏭️ Question already pending: {question_clean}")
+            print(f"⏭️ Already pending: {question_clean}")
             return False
         
-        # Add new question
         new_row = pd.DataFrame({'question': [question_clean]})
         pending = pd.concat([pending, new_row], ignore_index=True)
-        
-        # Save
         pending.to_csv(PENDING_FILE, index=False)
+        
         print(f"✅ Saved to pending: {question_clean}")
         return True
         
     except Exception as e:
-        print(f"❌ Error saving pending question: {e}")
+        print(f"❌ Error saving pending: {e}")
         return False
 
 def get_pending_questions():
@@ -350,13 +246,11 @@ def get_pending_questions():
         pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
         pending = pending.dropna(subset=['question'])
         pending['question'] = pending['question'].astype(str).str.strip()
-        pending = pending[pending['question'] != '']
         
-        questions = pending['question'].tolist()
-        return questions
+        return pending['question'].tolist()
         
     except Exception as e:
-        print(f"❌ Error reading pending questions: {e}")
+        print(f"❌ Error reading pending: {e}")
         return []
 
 def remove_pending_question(question):
@@ -368,10 +262,64 @@ def remove_pending_question(question):
         pending = pd.read_csv(PENDING_FILE, dtype={'question': str})
         pending = pending[pending['question'] != question]
         pending.to_csv(PENDING_FILE, index=False)
+        
         print(f"🗑️ Removed from pending: {question}")
         
     except Exception as e:
-        print(f"❌ Error removing pending question: {e}")
+        print(f"❌ Error removing pending: {e}")
+
+# ==================== ANSWERED QUESTIONS TRACKING ====================
+
+def save_answered_question(question, answer):
+    """Track answered questions for customer polling"""
+    import json
+    try:
+        with open(ANSWERED_FILE, 'r') as f:
+            answered = json.load(f)
+        
+        # Add new answer with timestamp
+        answered[question] = {
+            'answer': answer,
+            'timestamp': time.time()
+        }
+        
+        # Clean old answers (older than 1 hour)
+        current_time = time.time()
+        answered = {
+            q: data for q, data in answered.items()
+            if current_time - data['timestamp'] < 3600
+        }
+        
+        with open(ANSWERED_FILE, 'w') as f:
+            json.dump(answered, f, indent=2)
+        
+        print(f"✅ Tracked answer for polling: {question}")
+        
+    except Exception as e:
+        print(f"❌ Error tracking answer: {e}")
+
+def check_for_answer(question):
+    """Check if a question has been answered (for customer polling)"""
+    import json
+    try:
+        with open(ANSWERED_FILE, 'r') as f:
+            answered = json.load(f)
+        
+        if question in answered:
+            answer_data = answered[question]
+            
+            # Remove from tracking after retrieval
+            del answered[question]
+            with open(ANSWERED_FILE, 'w') as f:
+                json.dump(answered, f, indent=2)
+            
+            return answer_data['answer']
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error checking answer: {e}")
+        return None
 
 # ==================== ENDPOINTS ====================
 
@@ -379,112 +327,58 @@ def remove_pending_question(question):
 def health():
     return jsonify({
         "status": "healthy",
-        "faq_file_exists": FAQ_FILE.exists(),
-        "faq_location": str(FAQ_FILE),
-        "mode": "optimized-3column-faq"
+        "faq_file": str(FAQ_FILE),
+        "faq_exists": FAQ_FILE.exists()
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
-        "status": "running", 
-        "faq_format": "3-column (question, answer, follow_up)",
-        "optimized": "for auto repair domain"
+        "status": "running"
     }), 200
-
-@app.route('/debug_faq', methods=['GET'])
-def debug_faq():
-    """Debug endpoint to check FAQ content"""
-    try:
-        if not FAQ_FILE.exists():
-            return jsonify({"error": "FAQ file not found"}), 404
-            
-        faq_data = pd.read_csv(FAQ_FILE)
-        
-        return jsonify({
-            "faq_file_exists": True,
-            "faq_location": str(FAQ_FILE),
-            "total_entries": len(faq_data),
-            "columns": faq_data.columns.tolist(),
-            "sample_questions": faq_data['question'].head(10).tolist(),
-            "sample_answers_preview": [answer[:100] + "..." for answer in faq_data['answer'].head(10).tolist()]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/test_search', methods=['POST'])
-def test_search():
-    """Test search for specific questions"""
-    data = request.get_json()
-    test_question = data.get('question', '').strip()
-    
-    if not test_question:
-        return jsonify({"error": "Please provide a question"}), 400
-    
-    try:
-        if not FAQ_FILE.exists():
-            return jsonify({"error": "FAQ file not found"}), 404
-            
-        faq_data = pd.read_csv(FAQ_FILE)
-        result, score = smart_faq_search(test_question, faq_data)
-        
-        return jsonify({
-            "test_question": test_question,
-            "found_match": result is not None,
-            "answer": result,
-            "confidence_score": score,
-            "faq_entries_searched": len(faq_data)
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint - OPTIMIZED FOR YOUR FAQ"""
+    """Customer chatbot endpoint"""
     try:
-        # Get and validate input
         data = request.get_json()
         if not data:
-            return jsonify({'reply': "Please provide a message in JSON format."}), 400
+            return jsonify({'reply': "Please provide a message."}), 400
             
         user_message = data.get('message', '').strip()
         if not user_message:
             return jsonify({'reply': "Please describe your vehicle problem."})
 
-        print(f"📨 Received: '{user_message}'")
+        print(f"📨 Customer: '{user_message}'")
         reply_parts = []
         
-        # Check FAQ with OPTIMIZED search for your 3-column data
+        # 1️⃣ Check if this question was recently answered by admin
+        recent_answer = check_for_answer(user_message)
+        if recent_answer:
+            print(f"✅ Found recent admin answer!")
+            return jsonify({
+                'reply': f"✅ **Admin Response:**\n\n{recent_answer}",
+                'admin_answered': True
+            })
+        
+        # 2️⃣ Check FAQ
+        faq_reply = None
         try:
-            if not FAQ_FILE.exists():
-                print(f"❌ FAQ file not found at: {FAQ_FILE}")
-                faq_reply = None
-            else:
-                # Read your 3-column FAQ
+            if FAQ_FILE.exists():
                 faq_data = pd.read_csv(FAQ_FILE)
-                
-                # Clean data - handle your 3 columns
                 faq_data = faq_data.dropna(subset=['question', 'answer'])
-                faq_data = faq_data[faq_data['question'].str.strip() != '']
-                faq_data = faq_data[faq_data['answer'].str.strip() != '']
-                
-                print(f"📊 Searching {len(faq_data)} FAQ entries...")
                 
                 faq_reply, score = smart_faq_search(user_message, faq_data)
                 
                 if faq_reply:
                     reply_parts.append(f"🔧 {faq_reply}")
-                    print(f"✅ FAQ MATCH FOUND (score: {score:.3f})")
-                else:
-                    print(f"❌ NO FAQ MATCH (best score: {score:.3f})")
+                    print(f"✅ FAQ match (score: {score:.3f})")
                     
         except Exception as e:
-            print(f"⚠️ FAQ processing error: {e}")
-            faq_reply = None
+            print(f"⚠️ FAQ error: {e}")
 
-        # Check Services
+        # 3️⃣ Check Services
         try:
             services = get_services_from_db()
             top_services = smart_service_search(user_message, services)
@@ -499,37 +393,29 @@ def chat():
                         f"💰 Price: ₱{float(service['price']):,.2f}"
                     )
                     reply_parts.append(part)
-                print(f"✅ Found {len(top_services)} service matches")
+                print(f"✅ Found {len(top_services)} services")
                 
         except Exception as e:
-            print(f"⚠️ Service processing error: {e}")
-            top_services = []
+            print(f"⚠️ Service error: {e}")
 
-        # If no matches found, forward to admin
+        # 4️⃣ If no matches, forward to admin
         if not reply_parts:
             saved = save_pending_question(user_message)
             
             if saved:
                 reply_parts.append(
                     "🤖 I'm not sure about that yet. I've forwarded your question to our admin. "
-                    "You'll be updated soon via real-time notification!"
+                    "Check back in a few moments for an update!"
                 )
-                print(f"📤 Forwarded to admin: {user_message}")
-            else:
-                reply_parts.append(
-                    "🤖 Your question is already being reviewed by our admin. "
-                    "You'll be updated soon via real-time notification!"
-                )
+                print(f"📤 Forwarded to admin")
 
         reply = "\n\n".join(reply_parts)
         return jsonify({'reply': reply})
         
     except Exception as e:
-        print(f"💥 Critical error in /chat: {e}")
+        print(f"💥 Chat error: {e}")
         traceback.print_exc()
-        return jsonify({
-            'reply': "I'm experiencing technical difficulties. Please try again in a moment."
-        }), 500
+        return jsonify({'reply': "Technical difficulties. Please try again."}), 500
 
 # ==================== ADMIN ENDPOINTS ====================
 
@@ -543,7 +429,7 @@ def get_pending():
 
 @app.route('/get_next_question', methods=['GET'])
 def get_next_question():
-    """Get the next pending question for admin"""
+    """Get next pending question for admin"""
     global current_question
     
     questions = get_pending_questions()
@@ -556,15 +442,11 @@ def get_next_question():
         current_question = questions[0]
         return jsonify({'new': True, 'question': current_question})
 
-    if current_question == questions[0]:
-        return jsonify({'new': False})
-    
-    current_question = questions[0]
-    return jsonify({'new': True, 'question': current_question})
+    return jsonify({'new': False})
 
 @app.route('/admin_chat', methods=['POST'])
 def admin_chat():
-    """Admin chatbot endpoint - FIXED VERSION"""
+    """Admin chatbot endpoint - FIXED TO SAVE CORRECTLY"""
     global current_question
     try:
         data = request.get_json()
@@ -573,6 +455,7 @@ def admin_chat():
         if not message:
             return jsonify({'reply': 'Please type something.'})
 
+        # If no active question, get first pending
         if current_question is None:
             questions = get_pending_questions()
             if not questions:
@@ -580,43 +463,48 @@ def admin_chat():
             current_question = questions[0]
             return jsonify({'reply': f"❓ {current_question}\n\nProvide your answer:"})
 
-        # Save answer
+        # Save answer to FAQ
         question = current_question
         answer = message
 
-        # Add to FAQ (using your 3-column format)
+        print(f"💾 Saving to FAQ: '{question}' -> '{answer}'")
+
         try:
+            # Read existing FAQ
             if FAQ_FILE.exists():
                 faq = pd.read_csv(FAQ_FILE)
-                # Remove existing entry if any
-                faq = faq[faq['question'] != question]
-                # Add new row with your 3-column format
-                new_row = pd.DataFrame({
-                    'question': [question], 
-                    'answer': [answer],
-                    'follow_up': ['']
-                })
-                faq = pd.concat([faq, new_row], ignore_index=True)
-                faq.to_csv(FAQ_FILE, index=False)
-                print(f"✅ Added to FAQ: {question}")
+                print(f"📊 Current FAQ has {len(faq)} entries")
+            else:
+                faq = pd.DataFrame(columns=['question', 'answer'])
+            
+            # Remove duplicate if exists
+            faq = faq[faq['question'] != question]
+            
+            # Add new entry (2 COLUMNS ONLY: question, answer)
+            new_row = pd.DataFrame({
+                'question': [question], 
+                'answer': [answer]
+            })
+            
+            faq = pd.concat([faq, new_row], ignore_index=True)
+            
+            # Save to CSV
+            faq.to_csv(FAQ_FILE, index=False)
+            print(f"✅ SAVED TO FAQ: {question} -> {answer}")
+            
+            # Verify it was saved
+            verify = pd.read_csv(FAQ_FILE)
+            print(f"✅ Verified: FAQ now has {len(verify)} entries")
+            
         except Exception as e:
-            print(f"⚠️ FAQ save error: {e}")
+            print(f"❌ FAQ SAVE ERROR: {e}")
+            traceback.print_exc()
+
+        # Track for customer polling
+        save_answered_question(question, answer)
 
         # Remove from pending
         remove_pending_question(question)
-
-        # 🔥 CRITICAL FIX: Create proper notification
-        notification_message = json.dumps({
-            "type": "admin_reply",
-            "original_question": question,
-            "admin_answer": answer,
-            "timestamp": time.time(),
-            "message": f"✅ **Admin Response:**\n\n**Your Question:** {question}\n\n**Answer:** {answer}"
-        })
-        
-        # Send notification via SSE
-        send_sse_message(notification_message)
-        print(f"📢 Admin notification sent: {notification_message}")
 
         # Get next question
         current_question = None
@@ -625,9 +513,9 @@ def admin_chat():
         if questions:
             next_q = questions[0]
             current_question = next_q
-            reply = f"✅ Answer saved and customer notified!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
+            reply = f"✅ Answer saved!\n\nNext question:\n❓ {next_q}\nProvide your answer:"
         else:
-            reply = "✅ Answer saved and customer notified! No more pending questions."
+            reply = "✅ Answer saved! No more pending questions."
 
         return jsonify({'reply': reply})
         
@@ -636,43 +524,25 @@ def admin_chat():
         traceback.print_exc()
         return jsonify({'reply': 'Error processing request.'}), 500
 
-@app.route('/stream')
-def stream():
-    """SSE endpoint for customer updates - FIXED VERSION"""
-    def event_stream():
-        # Generate a simple user ID for this session
-        user_id = str(hash(request.remote_addr + str(time.time())))
-        q = ClientQueue()
-        clients[user_id] = q
-        
-        print(f"🔗 New SSE connection: {user_id}")
-        
-        try:
-            while True:
-                msg = q.queue.get(timeout=30)  # 30 second timeout
-                yield f"data: {json.dumps({'message': msg})}\n\n"
-                q.last_activity = time.time()
-        except Exception as e:
-            print(f"🔴 SSE connection closed: {user_id} - {e}")
-            clients.pop(user_id, None)
+@app.route('/check_answer/<path:question>', methods=['GET'])
+def check_answer(question):
+    """Endpoint for customer to check if their question was answered"""
+    answer = check_for_answer(question)
     
-    return Response(
-        event_stream(), 
-        mimetype="text/event-stream",
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*'
-        }
-    )
+    if answer:
+        return jsonify({
+            'answered': True,
+            'answer': answer
+        })
+    else:
+        return jsonify({'answered': False})
 
 # ==================== RUN ====================
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n🚀 Starting Papsi Chatbot on port {port}")
-    print("💡 OPTIMIZED for your 3-column FAQ with auto repair content")
-    print("🎯 FIXED: Admin replies now reach customers via SSE")
-    print("📊 Using smart keyword matching optimized for vehicle problems")
+    print("✅ Fixed: Admin replies now save correctly to FAQ")
+    print("✅ Fixed: Customers can see admin replies via polling")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
