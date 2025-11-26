@@ -1,5 +1,5 @@
 // 🔥 FIXED: Now uses the SAME backend as customer bot
-const RENDER_URL = 'https://papsi-chatbot-api.onrender.com';
+const RENDER_URL = 'https://papsi-chatbot-api-n8pw.onrender.com';
 // Use the unified bot endpoints (production_bot.py)
 const API_URL = `${RENDER_URL}/admin_chat`;
 const POLL_URL = `${RENDER_URL}/get_next_question`;
