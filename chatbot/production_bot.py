@@ -168,37 +168,59 @@ def smart_faq_search(user_message, faq_data):
     return best_match, best_score
 
 def smart_service_search(user_message, services):
-    """Smart service search that only shows relevant services"""
+    """Enhanced service search that automatically maps symptoms to services"""
     user_clean = preprocess_text(user_message)
     
     print(f"🔧 Service search for: '{user_message}'")
     
-    # Enhanced keyword mapping for auto repair context
-    service_keywords = {
-        'brake': ['brake service', 'brake repair', 'brake fluid', 'brake diagnostic'],
+    # Automatic symptom-to-service mapping
+    symptom_service_map = {
+        # Brake problems
+        'brake': ['brake', 'brake service', 'brake repair', 'brake fluid'],
         'soft': ['brake service', 'brake fluid'],
-        'spongy': ['brake service', 'brake fluid'], 
+        'spongy': ['brake service', 'brake fluid'],
         'pedal': ['brake service', 'brake repair'],
+        'weak': ['brake service', 'brake repair'],
+        'slow': ['brake service', 'brake repair'],
         'stop': ['brake service', 'brake repair'],
         'squeal': ['brake service', 'brake pad'],
         'grind': ['brake service', 'brake pad'],
         
-        'ac': ['ac repair', 'ac service', 'aircon cleaning'],
-        'air': ['ac repair', 'ac service', 'aircon cleaning'],
-        'cool': ['ac repair', 'ac service'],
-        'hot': ['ac repair', 'cooling system'],
+        # Oil problems
+        'oil': ['change oil', 'oil change', 'engine tune'],
+        'change': ['change oil', 'oil change'],
+        'consumption': ['change oil', 'engine tune'],
+        'leak': ['change oil', 'engine diagnostic'],
         
-        'electrical': ['electrical', 'battery', 'wiring'],
-        'battery': ['battery', 'electrical'],
-        'light': ['electrical', 'light repair'],
+        # Engine problems
+        'engine': ['engine tune', 'engine diagnostic'],
+        'start': ['battery service', 'electrical', 'engine diagnostic'],
+        'overheat': ['engine diagnostic', 'cooling system'],
+        'misfire': ['engine tune', 'engine diagnostic'],
         
-        'engine': ['engine diagnostic', 'engine repair'],
-        'noise': ['engine diagnostic', 'suspension repair'],
-        'start': ['battery service', 'starter repair'],
+        # Electrical problems
+        'electrical': ['electrical'],
+        'battery': ['electrical', 'battery service'],
+        'light': ['electrical'],
+        'power': ['electrical', 'battery service'],
         
-        'tire': ['tire service', 'wheel alignment'],
-        'vibration': ['wheel alignment', 'tire balance'],
-        'alignment': ['wheel alignment'],
+        # AC problems
+        'ac': ['aircon cleaning'],
+        'air': ['aircon cleaning'],
+        'cool': ['aircon cleaning'],
+        'hot': ['aircon cleaning'],
+        'smell': ['aircon cleaning'],
+        
+        # Body/paint problems
+        'body': ['auto body repair'],
+        'paint': ['auto painting'],
+        'dent': ['auto body repair'],
+        'scratch': ['auto painting'],
+        
+        # Cleaning services
+        'wash': ['under wash'],
+        'clean': ['under wash', 'aircon cleaning'],
+        'dirty': ['under wash', 'aircon cleaning']
     }
     
     matches = []
@@ -209,33 +231,49 @@ def smart_service_search(user_message, services):
         
         score = 0
         
-        # Check if service is relevant to user's problem
-        for user_word, relevant_services in service_keywords.items():
-            if user_word in user_clean:
-                # This word in user's message matches our keyword map
-                for relevant_service in relevant_services:
-                    if relevant_service in name or relevant_service in desc:
-                        score += 3.0  # Strong match
-                        print(f"  ✅ Relevant: '{user_word}' -> '{service['service_name']}'")
+        # STRATEGY 1: Automatic symptom mapping (MOST IMPORTANT)
+        for symptom, relevant_services in symptom_service_map.items():
+            if symptom in user_clean:
+                # User mentioned this symptom - check if service matches
+                for target_service in relevant_services:
+                    if target_service in name or target_service in desc:
+                        score += 4.0  # High score for symptom-based match
+                        print(f"  ✅ Symptom '{symptom}' -> service '{service['service_name']}'")
         
-        # Basic keyword matching (weaker)
+        # STRATEGY 2: Direct keyword matching
         for word in user_clean.split():
-            if len(word) > 3:  # Only longer words
+            if len(word) > 3:
                 if word in name:
-                    score += 1.0
+                    score += 2.0
                 elif word in desc:
-                    score += 0.5
+                    score += 1.0
+        
+        # STRATEGY 3: Category-based matching
+        service_categories = {
+            'brake': ['brake', 'pad', 'rotor', 'caliper', 'bleed', 'fluid'],
+            'oil': ['oil', 'change oil', 'lube', 'filter'],
+            'engine': ['engine', 'tune', 'motor', 'cylinder'],
+            'electrical': ['electrical', 'battery', 'wiring', 'light'],
+            'ac': ['ac', 'aircon', 'cleaning', 'cooling'],
+            'body': ['body', 'panel', 'paint', 'structure'],
+            'wash': ['wash', 'clean', 'undercarriage']
+        }
+        
+        for category, keywords in service_categories.items():
+            if any(cat_word in user_clean for cat_word in [category] + keywords):
+                if any(cat_word in name for cat_word in keywords):
+                    score += 2.0
         
         print(f"  📊 Service: {service['service_name']} -> Score: {score:.2f}")
         
         # Only include services with good matches
-        if score >= 2.0:  # Must have decent relevance
+        if score >= 2.0:
             matches.append((service, score))
     
     # Return top relevant matches
     matches.sort(key=lambda x: x[1], reverse=True)
-    return matches[:3]  # Max 3 recommendations
-
+    print(f"🎯 Found {len(matches)} relevant services")
+    return matches[:3]
 # ==================== DATABASE ====================
 
 def get_db_connection():
