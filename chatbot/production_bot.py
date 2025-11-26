@@ -1,5 +1,5 @@
 """
-Papsi Repair Shop - Unified Chatbot API with AI Model
+Papsi Repair Shop - Unified Chatbot API with AI Model + Fallback
 FIXED: Supports 3-column FAQ and optimized for Render 512MB
 """
 
@@ -82,44 +82,60 @@ initialize_files()
 print(f"📁 FAQ File: {FAQ_FILE}")
 print(f"📁 Pending File: {PENDING_FILE}")
 
-# ==================== AI MODEL - SMALLER FOR 512MB RAM ====================
+# ==================== AI MODEL WITH FALLBACK ====================
 model = None
 model_loading = False
 model_loaded = False
+ultra_light_mode = False
 
-def load_optimized_model():
-    """Load SMALLER AI model for 512MB RAM"""
-    global model, model_loading, model_loaded
+def load_model_with_fallback():
+    """Load AI model with fallback to ultra-light mode"""
+    global model, model_loading, model_loaded, ultra_light_mode
     
     if model_loaded or model_loading:
         return
         
     model_loading = True
-    print("🚀 Loading SMALLER AI model for 512MB RAM...")
+    print("🚀 Loading AI model with fallback...")
     
     try:
         # Force garbage collection before loading
         gc.collect()
         
-        # Use smaller model that fits in 512MB
+        # Try main model first
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('all-MiniLM-L6-v2')  # Only 80MB download, ~200MB in memory
+        model = SentenceTransformer('all-MiniLM-L6-v2')  # Lightweight model
         
         model_loaded = True
-        print("✅ SMALLER AI model loaded successfully! (~200MB RAM)")
+        ultra_light_mode = False
+        print("✅ AI model loaded successfully! (Hybrid mode)")
         
     except Exception as e:
-        print(f"❌ Model loading failed: {e}")
-        model_loaded = False
+        print(f"❌ Main model failed: {e}")
+        
+        # Fallback to ULTRA LIGHT mode (no model)
+        try:
+            model = None
+            model_loaded = False
+            ultra_light_mode = True
+            print("🔄 Falling back to ULTRA LIGHT mode (keyword search only)")
+            print("💡 All features working except AI semantic search")
+            
+        except Exception as e2:
+            print(f"💥 Fallback also failed: {e2}")
+            model_loaded = False
+            ultra_light_mode = True
+            
     finally:
         model_loading = False
 
-# Load model with error handling
+# Load model with fallback
 try:
-    load_optimized_model()
+    load_model_with_fallback()
 except Exception as e:
-    print(f"💥 Model loading crashed: {e}")
+    print(f"💥 Model loading crashed, using ultra-light mode: {e}")
     model_loaded = False
+    ultra_light_mode = True
 
 # ==================== SSE ====================
 clients = []
@@ -158,8 +174,8 @@ def hybrid_search_faq(user_message, faq_data):
     """Hybrid search: AI first, then keyword fallback"""
     print(f"🔍 Searching FAQ for: '{user_message}'")
     
-    # Try AI model first
-    if model_loaded:
+    # Try AI model first if available
+    if model_loaded and not ultra_light_mode:
         ai_result, ai_score = semantic_search_faq(user_message, faq_data)
         if ai_result is not None:
             print(f"🤖 AI found match (score: {ai_score:.3f})")
@@ -167,13 +183,13 @@ def hybrid_search_faq(user_message, faq_data):
         else:
             print(f"🤖 AI no match (best score: {ai_score:.3f})")
     
-    # Fallback to keyword search
-    print("🔧 Using keyword fallback search")
+    # Fallback to keyword search (ALWAYS WORKS)
+    print("🔧 Using keyword search" + (" (ultra-light mode)" if ultra_light_mode else ""))
     return keyword_search_faq(user_message, faq_data)
 
 def semantic_search_faq(user_message, faq_data):
-    """Enhanced semantic search with better error handling"""
-    if not model_loaded or model is None or len(faq_data) == 0:
+    """Semantic search - only works if model is loaded"""
+    if not model_loaded or ultra_light_mode or model is None or len(faq_data) == 0:
         return None, 0
         
     try:
@@ -227,7 +243,7 @@ def semantic_search_faq(user_message, faq_data):
         return None, 0
 
 def keyword_search_faq(user_message, faq_data):
-    """Enhanced keyword search as fallback"""
+    """Enhanced keyword search - ALWAYS WORKS"""
     try:
         user_clean = preprocess_text(user_message)
         user_words = set(user_clean.split())
@@ -283,17 +299,17 @@ def hybrid_search_services(user_message, services):
         return []
         
     # Try AI first if available
-    if model_loaded:
+    if model_loaded and not ultra_light_mode:
         ai_results = semantic_search_services(user_message, services)
         if ai_results:
             return ai_results
     
-    # Fallback to keyword search
+    # Fallback to keyword search (ALWAYS WORKS)
     return keyword_search_services(user_message, services)
 
 def semantic_search_services(user_message, services):
-    """Semantic service search"""
-    if not model_loaded or model is None or not services:
+    """Semantic service search - only if model available"""
+    if not model_loaded or ultra_light_mode or model is None or not services:
         return []
         
     try:
@@ -320,7 +336,7 @@ def semantic_search_services(user_message, services):
         return []
 
 def keyword_search_services(user_message, services):
-    """Keyword service search"""
+    """Keyword service search - ALWAYS WORKS"""
     user_clean = user_message.lower()
     keywords = user_clean.split()
     
@@ -447,7 +463,8 @@ def health():
     return jsonify({
         "status": "healthy",
         "model_loaded": model_loaded,
-        "faq_entries": "using hybrid AI + keyword search",
+        "ultra_light_mode": ultra_light_mode,
+        "faq_entries": "using hybrid AI + keyword search" if model_loaded else "using keyword search only",
         "memory_optimized": True
     }), 200
 
@@ -457,7 +474,8 @@ def root():
         "service": "Papsi Repair Shop Chatbot API",
         "status": "running",
         "model_ready": model_loaded,
-        "search_mode": "hybrid (AI + keywords)"
+        "ultra_light_mode": ultra_light_mode,
+        "search_mode": "hybrid (AI + keywords)" if model_loaded else "ultra-light (keywords only)"
     }), 200
 
 @app.route('/debug', methods=['GET'])
@@ -475,6 +493,7 @@ def debug():
             "pending_questions": len(pending_data),
             "services_available": len(services),
             "model_loaded": model_loaded,
+            "ultra_light_mode": ultra_light_mode,
             "memory_usage": "optimized"
         })
     except Exception as e:
@@ -482,7 +501,7 @@ def debug():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint - ENHANCED WITH HYBRID SEARCH"""
+    """Customer chatbot endpoint - WORKS IN BOTH MODES"""
     try:
         data = request.get_json()
         user_message = data.get('message', '').strip()
@@ -493,7 +512,7 @@ def chat():
         print(f"📨 Received: '{user_message}'")
         reply_parts = []
         
-        # Check FAQ with HYBRID search
+        # Check FAQ with HYBRID search (works in both modes)
         try:
             faq_data = pd.read_csv(FAQ_FILE)
             # Handle 3-column format
@@ -507,7 +526,7 @@ def chat():
             print(f"⚠️ FAQ error: {e}")
             faq_reply = None
 
-        # Check Services with HYBRID search
+        # Check Services with HYBRID search (works in both modes)
         services = get_services_from_db()
         top_services = hybrid_search_services(user_message, services)
 
@@ -665,7 +684,7 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n🚀 Starting Papsi Chatbot on port {port}")
     print(f"🤖 AI Model: {'LOADED' if model_loaded else 'NOT LOADED'}")
-    print("💡 Using HYBRID search (AI + keywords)")
+    print(f"💡 Mode: {'HYBRID (AI + keywords)' if model_loaded else 'ULTRA-LIGHT (keywords only)'}")
     print("📊 Memory optimized for Render 512MB")
     print("🎯 Supports 3-column FAQ format")
     
