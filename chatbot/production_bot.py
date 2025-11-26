@@ -1,6 +1,6 @@
 """
-Papsi Repair Shop - Complete Chatbot API
-CORRECTED PATHS for FAQ outside Python folder
+Papsi Repair Shop - Complete Chatbot API 
+OPTIMIZED FOR YOUR 3-COLUMN FAQ.CSV
 """
 
 from flask import Flask, request, jsonify, Response
@@ -40,50 +40,37 @@ DB_CONFIG = {
 
 # ==================== CORRECTED FILE PATHS ====================
 
-# Get the current directory where this Python file is located
 CURRENT_DIR = Path(__file__).resolve().parent
-print(f"📁 Current Python directory: {CURRENT_DIR}")
-
-# Go up one level to the root directory where faq.csv is located
 ROOT_DIR = CURRENT_DIR.parent
-print(f"📁 Root directory (where faq.csv should be): {ROOT_DIR}")
 
-# CORRECTED: FAQ is in the root directory (same level as your Python folder)
+# CORRECTED: FAQ is in the root directory
 FAQ_FILE = ROOT_DIR / 'faq.csv'
-# Pending questions should be in the same directory as the Python app
 PENDING_FILE = CURRENT_DIR / 'pending_questions.csv'
 
 print(f"📁 Looking for FAQ at: {FAQ_FILE}")
-print(f"📁 Pending file at: {PENDING_FILE}")
 
-# Initialize files with CORRECT paths
+# Initialize files with YOUR 3-COLUMN FAQ
 def initialize_files():
     try:
-        # Check if FAQ file exists in the root directory
+        # Check if FAQ file exists and has content
         if FAQ_FILE.exists():
             faq_data = pd.read_csv(FAQ_FILE)
-            print(f"✅ FOUND YOUR FAQ FILE: {len(faq_data)} entries")
+            print(f"✅ FOUND YOUR 3-COLUMN FAQ FILE: {len(faq_data)} entries")
+            print(f"📊 FAQ Columns: {faq_data.columns.tolist()}")
             
             # Show what's in your FAQ
-            print("📝 YOUR FAQ CONTENT:")
+            print("📝 SAMPLE FAQ CONTENT:")
             for i, (idx, row) in enumerate(faq_data.iterrows()):
-                if i < 5:  # Show first 5
+                if i < 3:  # Show first 3
                     print(f"   {i+1}. Q: {row['question']}")
-                    print(f"      A: {row['answer'][:60]}...")
+                    print(f"      A: {row['answer'][:80]}...")
         else:
             print(f"❌ FAQ file not found at: {FAQ_FILE}")
-            print("💡 Please ensure faq.csv is in the root directory of your project")
-            # List files in root directory to help debug
-            try:
-                root_files = list(ROOT_DIR.glob('*'))
-                print(f"📂 Files in root directory: {[f.name for f in root_files]}")
-            except:
-                pass
             
-        # Initialize pending file in the Python app directory
+        # Initialize pending file
         if not PENDING_FILE.exists():
             pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
-            print("✅ Created pending questions file in Python directory")
+            print("✅ Created pending questions file")
         
     except Exception as e:
         print(f"❌ File initialization error: {e}")
@@ -91,7 +78,7 @@ def initialize_files():
 
 initialize_files()
 
-# ==================== SIMPLE KEYWORD MATCHING ====================
+# ==================== OPTIMIZED FAQ SEARCH FOR YOUR DATA ====================
 
 def preprocess_text(text):
     """Clean and preprocess text for better matching"""
@@ -103,7 +90,7 @@ def preprocess_text(text):
 
 def smart_faq_search(user_message, faq_data):
     """
-    Smart FAQ search that works with your existing FAQ
+    Smart FAQ search optimized for your 3-column FAQ data
     """
     print(f"🔍 Searching FAQ for: '{user_message}'")
     
@@ -123,6 +110,7 @@ def smart_faq_search(user_message, faq_data):
     best_question = None
     
     for idx, row in faq_data.iterrows():
+        # Handle your 3-column format: question, answer, follow_up
         question = str(row['question'])
         answer = str(row['answer'])
         question_clean = preprocess_text(question)
@@ -133,26 +121,41 @@ def smart_faq_search(user_message, faq_data):
         if not common_words:
             continue
             
-        # Word overlap score
+        # STRATEGY 1: Word overlap score
         score = len(common_words) / len(user_words)
         
-        # Exact phrase bonus
+        # STRATEGY 2: Exact phrase bonus (very important for your FAQ)
         if user_clean in question_clean:
-            score += 0.8
+            score += 1.0  # Higher bonus for exact matches
             print(f"  ✅ Exact phrase match!")
         
-        # Important word bonus
-        important_words = {'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 'wheel', 'ac', 'air', 'conditioning'}
+        # STRATEGY 3: Important auto repair keywords bonus
+        important_auto_words = {
+            'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 'wheel', 
+            'ac', 'air', 'conditioning', 'transmission', 'suspension', 'check', 
+            'light', 'noise', 'smoke', 'leak', 'overheating', 'fuel', 'consumption',
+            'clutch', 'gear', 'shift', 'steering', 'power', 'loss', 'misfire',
+            'coolant', 'exhaust', 'catalytic', 'converter', 'abs', 'pump', 'hybrid'
+        }
+        
         for word in common_words:
-            if word in important_words:
+            if word in important_auto_words:
                 score += 0.3
+            elif len(word) > 4:
+                score += 0.1
+        
+        # STRATEGY 4: Vehicle type matching
+        vehicle_types = {'car', 'truck', 'van', 'motorcycle', 'motorbike', 'suv', 'lorry', 'pickup', 'diesel'}
+        for vehicle in vehicle_types:
+            if vehicle in user_clean and vehicle in question_clean:
+                score += 0.2
         
         print(f"  📝 Checking: '{question}'")
         print(f"  🔄 Common words: {common_words}")
         print(f"  📊 Score: {score:.3f}")
         
-        # LOW THRESHOLD for better matching
-        if score > best_score and score > 0.1:
+        # VERY LOW THRESHOLD for better matching with your FAQ
+        if score > best_score and score > 0.08:  # Lowered threshold
             best_score = score
             best_match = answer
             best_question = question
@@ -174,6 +177,20 @@ def smart_service_search(user_message, services):
         
     matches = []
     
+    # Common service keywords mapping based on your FAQ
+    service_keywords = {
+        'oil': ['oil change', 'oil service', 'lube', 'consumption'],
+        'brake': ['brake service', 'brake pad', 'brake repair', 'squeal', 'pedal'],
+        'engine': ['engine repair', 'engine diagnostic', 'tune up', 'overheating', 'misfire'],
+        'tire': ['tire rotation', 'tire service', 'wheel alignment', 'vibration'],
+        'ac': ['ac repair', 'air conditioning', 'ac service', 'cooling'],
+        'battery': ['battery replacement', 'battery service', 'dead', 'drains'],
+        'transmission': ['transmission service', 'transmission repair', 'gear', 'shift'],
+        'suspension': ['suspension repair', 'suspension service', 'noise'],
+        'electrical': ['electrical', 'light', 'flicker', 'dashboard'],
+        'exhaust': ['exhaust', 'catalytic', 'converter', 'smoke']
+    }
+    
     for service in services:
         name = preprocess_text(service['service_name'])
         desc = preprocess_text(service['description'])
@@ -187,13 +204,21 @@ def smart_service_search(user_message, services):
             elif keyword in desc:
                 score += 1.0
         
+        # Enhanced keyword matching using service categories
+        for category, keywords in service_keywords.items():
+            if any(cat_word in user_clean for cat_word in [category] + keywords):
+                if any(cat_word in name for cat_word in keywords):
+                    score += 3.0
+                elif any(cat_word in desc for cat_word in keywords):
+                    score += 2.0
+        
         # Exact phrase bonus
         if user_clean in name:
             score += 4.0
         elif user_clean in desc:
             score += 3.0
             
-        if score > 0.5:
+        if score > 0.3:  # Lower threshold
             matches.append((service, score))
     
     # Return top 3 matches
@@ -321,7 +346,8 @@ def health():
     return jsonify({
         "status": "healthy",
         "faq_file_exists": FAQ_FILE.exists(),
-        "faq_location": str(FAQ_FILE)
+        "faq_location": str(FAQ_FILE),
+        "mode": "optimized-3column-faq"
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -329,8 +355,8 @@ def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
         "status": "running", 
-        "faq_location": "root directory (corrected paths)",
-        "python_app_location": str(CURRENT_DIR)
+        "faq_format": "3-column (question, answer, follow_up)",
+        "optimized": "for auto repair domain"
     }), 200
 
 @app.route('/debug_faq', methods=['GET'])
@@ -338,25 +364,17 @@ def debug_faq():
     """Debug endpoint to check FAQ content"""
     try:
         if not FAQ_FILE.exists():
-            return jsonify({
-                "error": "FAQ file not found",
-                "searched_at": str(FAQ_FILE),
-                "current_directory": str(CURRENT_DIR),
-                "root_directory": str(ROOT_DIR)
-            }), 404
+            return jsonify({"error": "FAQ file not found"}), 404
             
         faq_data = pd.read_csv(FAQ_FILE)
-        faq_data = faq_data.dropna(subset=['question', 'answer'])
-        faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_data = faq_data[faq_data['answer'].str.strip() != '']
         
         return jsonify({
             "faq_file_exists": True,
             "faq_location": str(FAQ_FILE),
             "total_entries": len(faq_data),
             "columns": faq_data.columns.tolist(),
-            "questions": faq_data['question'].tolist(),
-            "answers_preview": [answer[:100] + "..." for answer in faq_data['answer'].tolist()]
+            "sample_questions": faq_data['question'].head(10).tolist(),
+            "sample_answers_preview": [answer[:100] + "..." for answer in faq_data['answer'].head(10).tolist()]
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -375,10 +393,6 @@ def test_search():
             return jsonify({"error": "FAQ file not found"}), 404
             
         faq_data = pd.read_csv(FAQ_FILE)
-        faq_data = faq_data.dropna(subset=['question', 'answer'])
-        faq_data = faq_data[faq_data['question'].str.strip() != '']
-        faq_data = faq_data[faq_data['answer'].str.strip() != '']
-        
         result, score = smart_faq_search(test_question, faq_data)
         
         return jsonify({
@@ -394,7 +408,7 @@ def test_search():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint - WITH CORRECTED PATHS"""
+    """Customer chatbot endpoint - OPTIMIZED FOR YOUR FAQ"""
     try:
         # Get and validate input
         data = request.get_json()
@@ -408,13 +422,16 @@ def chat():
         print(f"📨 Received: '{user_message}'")
         reply_parts = []
         
-        # Check FAQ with CORRECTED paths
+        # Check FAQ with OPTIMIZED search for your 3-column data
         try:
             if not FAQ_FILE.exists():
                 print(f"❌ FAQ file not found at: {FAQ_FILE}")
                 faq_reply = None
             else:
+                # Read your 3-column FAQ
                 faq_data = pd.read_csv(FAQ_FILE)
+                
+                # Clean data - handle your 3 columns
                 faq_data = faq_data.dropna(subset=['question', 'answer'])
                 faq_data = faq_data[faq_data['question'].str.strip() != '']
                 faq_data = faq_data[faq_data['answer'].str.strip() != '']
@@ -533,16 +550,21 @@ def admin_chat():
         question = current_question
         answer = message
 
-        # Add to FAQ (using CORRECTED path)
+        # Add to FAQ (using your 3-column format)
         try:
             if FAQ_FILE.exists():
                 faq = pd.read_csv(FAQ_FILE)
                 # Remove existing entry if any
                 faq = faq[faq['question'] != question]
-                new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
+                # Add new row with your 3-column format
+                new_row = pd.DataFrame({
+                    'question': [question], 
+                    'answer': [answer],
+                    'follow_up': ['']
+                })
                 faq = pd.concat([faq, new_row], ignore_index=True)
                 faq.to_csv(FAQ_FILE, index=False)
-                print(f"✅ Added to FAQ at: {FAQ_FILE}")
+                print(f"✅ Added to FAQ: {question}")
         except Exception as e:
             print(f"⚠️ FAQ save error: {e}")
 
@@ -590,9 +612,8 @@ def stream():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n🚀 Starting Papsi Chatbot on port {port}")
-    print(f"📁 Python app location: {CURRENT_DIR}")
-    print(f"📁 FAQ file location: {FAQ_FILE}")
-    print(f"📁 FAQ file exists: {FAQ_FILE.exists()}")
-    print("💡 Using CORRECTED file paths for external FAQ")
+    print("💡 OPTIMIZED for your 3-column FAQ with auto repair content")
+    print("🎯 Lower matching thresholds for better results")
+    print("📊 Using smart keyword matching optimized for vehicle problems")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
