@@ -1,3 +1,4 @@
+Chatbot-ui
 <?php
 // Chatbot UI Component - Vehicle Diagnostic Assistant
 ?>
@@ -56,33 +57,7 @@
 .typing-dot:nth-child(1){animation-delay:-.32s}
 .typing-dot:nth-child(2){animation-delay:-.16s}
 @keyframes typing{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1);opacity:1}}
-
-/* Admin message styling */
-.message-admin .message-avatar{background:#FFEBEE;color:#DC143C}
-.message-admin .message-content{background:#FFEBEE;color:#333;border:1px solid #DC143C;border-bottom-left-radius:4px}
-.admin-badge{background:#DC143C;color:white;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:5px}
-
-/* Notification toast */
-.chatbot-notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: linear-gradient(135deg, #4CAF50, #45a049);
-    color: white;
-    padding: 12px 16px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 10000;
-    transform: translateX(400px);
-    transition: transform 0.3s ease;
-    max-width: 300px;
-    font-size: 14px;
-}
-.chatbot-notification.show {
-    transform: translateX(0);
-}
 </style>
-
 <div id="chatbot" class="chatbot-container" aria-live="polite">
     <div class="chatbot-icon" id="chatbotIcon" style="
     display:none;
@@ -104,7 +79,7 @@
     <div class="chatbot-header" onclick="toggleChatbot()" role="button" aria-expanded="true">
         <h3>
             <span class="chatbot-status" id="chatbotStatus" title="Online"></span>
-            🔧 Auto Assistant
+           
         </h3>
         <button class="chatbot-toggle" id="chatbotToggle" aria-label="Minimize chatbot">-</button>
     </div>
@@ -118,7 +93,7 @@
                     <div class="quick-question" onclick="askQuestion('My engine is making a strange noise')">Engine Noise</div>
                     <div class="quick-question" onclick="askQuestion('My brakes are squeaking')">Brake Issues</div>
                     <div class="quick-question" onclick="askQuestion('My AC is not cooling')">AC Problems</div>
-                    <div class="quick-question" onclick="askQuestion('My car won\\'t start')">Starting Issues</div>
+                <div class="quick-question" onclick="askQuestion('My car won\\'t start')">Starting Issues</div>
                 </div>
             </div>
         </div>
@@ -137,15 +112,22 @@
         </div>
     </div>
 </div>
-
 <script>
+/*
+  Frontend adapted for Flask backend at:
+  http://127.0.0.1:5000/chat
+  - Uses POST JSON { message }
+  - Expects JSON { reply }
+  - Includes timeout and better error handling
+*/
 const API_URL = '/chatbot/chat_proxy.php';
-const SSE_URL = '/stream'; // Server-Sent Events endpoint
+const SSE_URL = '/stream';
 
 let chatbotMinimized = true;
 let isTyping = false;
 let welcomeShown = false;
 let eventSource = null;
+let pendingQuestions = [];
 
 // ==================== SSE REAL-TIME UPDATES ====================
 function setupSSE() {
@@ -160,13 +142,8 @@ function setupSSE() {
                 console.log('SSE received:', notification);
                 
                 if (notification.type === 'admin_reply') {
-                    // Show admin reply in chat
                     showAdminReply(notification);
-                    
-                    // Show notification toast
                     showNotification('🎉 Admin has replied to your question!');
-                    
-                    // Remove from pending questions
                     removePendingQuestion(notification.original_question);
                 }
             } catch (e) {
@@ -176,7 +153,6 @@ function setupSSE() {
         
         eventSource.onerror = function(event) {
             console.error('SSE connection error:', event);
-            // Attempt to reconnect after 5 seconds
             setTimeout(setupSSE, 5000);
         };
         
@@ -198,8 +174,7 @@ function showAdminReply(notification) {
     const messageContent = document.createElement('div');
     messageContent.className = 'message-content';
     messageContent.innerHTML = `
-        <span class="admin-badge">ADMIN</span>
-        <strong>Response to:</strong> "${escapeHtml(notification.original_question)}"<br><br>
+        <strong>Admin Response:</strong><br>
         ${escapeHtml(notification.admin_answer).replace(/\n/g, '<br>')}
     `;
     
@@ -211,23 +186,29 @@ function showAdminReply(notification) {
 }
 
 function showNotification(message) {
-    // Remove existing notification
-    const existingNotification = document.querySelector('.chatbot-notification');
-    if (existingNotification) {
-        existingNotification.remove();
-    }
-
     const notification = document.createElement('div');
-    notification.className = 'chatbot-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #4CAF50, #45a049);
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        transform: translateX(400px);
+        transition: transform 0.3s ease;
+        max-width: 300px;
+        font-size: 14px;
+    `;
     notification.textContent = message;
     document.body.appendChild(notification);
 
-    // Animate in
-    setTimeout(() => notification.classList.add('show'), 100);
+    setTimeout(() => notification.style.transform = 'translateX(0)', 100);
 
-    // Remove after 5 seconds
     setTimeout(() => {
-        notification.classList.remove('show');
+        notification.style.transform = 'translateX(400px)';
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
@@ -237,8 +218,6 @@ function showNotification(message) {
 }
 
 // ==================== PENDING QUESTIONS TRACKING ====================
-let pendingQuestions = [];
-
 function loadPendingQuestions() {
     const stored = localStorage.getItem('chatbot_pending_questions');
     if (stored) {
@@ -257,7 +236,6 @@ function savePendingQuestions() {
 
 function addPendingQuestion(question) {
     loadPendingQuestions();
-    // Don't add duplicates
     if (!pendingQuestions.find(q => q.question === question)) {
         pendingQuestions.push({
             question: question,
@@ -278,7 +256,7 @@ function removePendingQuestion(question) {
     }
 }
 
-// ==================== CHAT FUNCTIONS (UNCHANGED) ====================
+// ==================== CHAT FUNCTIONS ====================
 function toggleChatbot() {
     const chatbot = document.getElementById('chatbot');
     const toggle = document.getElementById('chatbotToggle');
@@ -337,7 +315,6 @@ function addMessage(content, isUser = false) {
     messageDiv.appendChild(avatar);
     messageDiv.appendChild(messageContent);
    
-    // Remove welcome message if it exists
     const welcome = document.getElementById('chatbotWelcome');
     if (welcome) welcome.remove();
    
@@ -350,7 +327,6 @@ function addMessage(content, isUser = false) {
         content.includes("forwarded your question") ||
         content.includes("already being reviewed")
     )) {
-        // Get the last user message from chat history
         const userMessages = messages.querySelectorAll('.message-user .message-content');
         if (userMessages.length > 0) {
             const lastUserMessage = userMessages[userMessages.length - 1].textContent;
@@ -384,18 +360,14 @@ async function sendChatbotMessage() {
    
     if (!message || isTyping) return;
    
-    // Disable input and button
     input.disabled = true;
     sendBtn.disabled = true;
    
-    // Add user message
     addMessage(message, true);
     input.value = '';
    
-    // Show typing indicator
     showTyping();
    
-    // Use AbortController to implement a timeout
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
    
@@ -436,7 +408,6 @@ async function sendChatbotMessage() {
             console.error('Chatbot error:', err);
         }
     } finally {
-        // Re-enable input and button
         input.disabled = false;
         sendBtn.disabled = false;
         input.focus();
@@ -479,4 +450,3 @@ window.addEventListener('beforeunload', function() {
         eventSource.close();
     }
 });
-</script>
