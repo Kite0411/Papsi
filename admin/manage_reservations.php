@@ -361,39 +361,6 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 <div class="container">
 <h1>Manage Reservations</h1>
 
-<!-- Status Summary Cards -->
-<div class="status-summary">
-    <div class="status-card pending">
-        <div class="icon">⏳</div>
-        <div class="count"><?php echo $status_counts['pending_verification']; ?></div>
-        <div class="label">Pending Verification</div>
-    </div>
-    
-    <div class="status-card confirmed">
-        <div class="icon">✓</div>
-        <div class="count"><?php echo $status_counts['confirmed']; ?></div>
-        <div class="label">Confirmed</div>
-    </div>
-    
-    <div class="status-card approved">
-        <div class="icon">✅</div>
-        <div class="count"><?php echo $status_counts['approved']; ?></div>
-        <div class="label">Approved</div>
-    </div>
-    
-    <div class="status-card declined">
-        <div class="icon">❌</div>
-        <div class="count"><?php echo $status_counts['declined']; ?></div>
-        <div class="label">Declined</div>
-    </div>
-    
-    <div class="status-card completed">
-        <div class="icon">🎉</div>
-        <div class="count"><?php echo $status_counts['completed']; ?></div>
-        <div class="label">Completed</div>
-    </div>
-</div>
-
 <div class="card">
 <table class="reservations-table">
 <tr>
