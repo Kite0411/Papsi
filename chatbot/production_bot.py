@@ -1,6 +1,6 @@
 """
 Papsi Repair Shop - Complete Chatbot API
-USES EXISTING FAQ.CSV - Optimized for Render 512MB
+CORRECTED PATHS for FAQ outside Python folder
 """
 
 from flask import Flask, request, jsonify, Response
@@ -38,33 +38,52 @@ DB_CONFIG = {
     'port': int(os.environ.get('DB_PORT', 3306))
 }
 
-BASE_DIR = Path(__file__).resolve().parent
+# ==================== CORRECTED FILE PATHS ====================
 
-# Use your existing FAQ file
-FAQ_FILE = BASE_DIR / 'faq.csv'
-PENDING_FILE = BASE_DIR / 'pending_questions.csv'
+# Get the current directory where this Python file is located
+CURRENT_DIR = Path(__file__).resolve().parent
+print(f"📁 Current Python directory: {CURRENT_DIR}")
 
-# Initialize files with YOUR existing FAQ
+# Go up one level to the root directory where faq.csv is located
+ROOT_DIR = CURRENT_DIR.parent
+print(f"📁 Root directory (where faq.csv should be): {ROOT_DIR}")
+
+# CORRECTED: FAQ is in the root directory (same level as your Python folder)
+FAQ_FILE = ROOT_DIR / 'faq.csv'
+# Pending questions should be in the same directory as the Python app
+PENDING_FILE = CURRENT_DIR / 'pending_questions.csv'
+
+print(f"📁 Looking for FAQ at: {FAQ_FILE}")
+print(f"📁 Pending file at: {PENDING_FILE}")
+
+# Initialize files with CORRECT paths
 def initialize_files():
     try:
-        # Check if FAQ file exists and has content
+        # Check if FAQ file exists in the root directory
         if FAQ_FILE.exists():
             faq_data = pd.read_csv(FAQ_FILE)
-            print(f"✅ USING YOUR FAQ FILE: {len(faq_data)} entries found")
+            print(f"✅ FOUND YOUR FAQ FILE: {len(faq_data)} entries")
             
             # Show what's in your FAQ
-            print("📝 YOUR FAQ QUESTIONS:")
+            print("📝 YOUR FAQ CONTENT:")
             for i, (idx, row) in enumerate(faq_data.iterrows()):
-                if i < 10:  # Show first 10
+                if i < 5:  # Show first 5
                     print(f"   {i+1}. Q: {row['question']}")
-                    print(f"      A: {row['answer'][:80]}...")
+                    print(f"      A: {row['answer'][:60]}...")
         else:
-            print("❌ FAQ file not found - please ensure faq.csv exists in root directory")
+            print(f"❌ FAQ file not found at: {FAQ_FILE}")
+            print("💡 Please ensure faq.csv is in the root directory of your project")
+            # List files in root directory to help debug
+            try:
+                root_files = list(ROOT_DIR.glob('*'))
+                print(f"📂 Files in root directory: {[f.name for f in root_files]}")
+            except:
+                pass
             
-        # Initialize pending file
+        # Initialize pending file in the Python app directory
         if not PENDING_FILE.exists():
             pd.DataFrame(columns=['question']).to_csv(PENDING_FILE, index=False)
-            print("✅ Created pending questions file")
+            print("✅ Created pending questions file in Python directory")
         
     except Exception as e:
         print(f"❌ File initialization error: {e}")
@@ -72,8 +91,7 @@ def initialize_files():
 
 initialize_files()
 
-# ==================== SIMPLE KEYWORD MATCHING (NO AI) ====================
-# Since you have FAQ issues, let's use reliable keyword matching
+# ==================== SIMPLE KEYWORD MATCHING ====================
 
 def preprocess_text(text):
     """Clean and preprocess text for better matching"""
@@ -86,7 +104,6 @@ def preprocess_text(text):
 def smart_faq_search(user_message, faq_data):
     """
     Smart FAQ search that works with your existing FAQ
-    Uses multiple matching strategies for best results
     """
     print(f"🔍 Searching FAQ for: '{user_message}'")
     
@@ -116,40 +133,25 @@ def smart_faq_search(user_message, faq_data):
         if not common_words:
             continue
             
-        # STRATEGY 1: Word overlap score
+        # Word overlap score
         score = len(common_words) / len(user_words)
         
-        # STRATEGY 2: Exact phrase bonus
+        # Exact phrase bonus
         if user_clean in question_clean:
             score += 0.8
-            print(f"  ✅ Exact phrase match: '{user_clean}' in '{question}'")
+            print(f"  ✅ Exact phrase match!")
         
-        # STRATEGY 3: Word order bonus
-        user_word_list = user_clean.split()
-        question_word_list = question_clean.split()
-        
-        # Check if words appear in similar order
-        order_matches = 0
-        for i, word in enumerate(user_word_list):
-            if i < len(question_word_list) and word == question_word_list[i]:
-                order_matches += 1
-        
-        if order_matches > 0:
-            score += order_matches * 0.1
-        
-        # STRATEGY 4: Important word bonus
-        important_words = {'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 'wheel', 'ac', 'air', 'conditioning', 'transmission', 'suspension'}
+        # Important word bonus
+        important_words = {'oil', 'change', 'brake', 'engine', 'start', 'battery', 'tire', 'wheel', 'ac', 'air', 'conditioning'}
         for word in common_words:
             if word in important_words:
-                score += 0.2
-            elif len(word) > 4:
-                score += 0.1
+                score += 0.3
         
         print(f"  📝 Checking: '{question}'")
         print(f"  🔄 Common words: {common_words}")
         print(f"  📊 Score: {score:.3f}")
         
-        # LOWER THRESHOLD for better matching
+        # LOW THRESHOLD for better matching
         if score > best_score and score > 0.1:
             best_score = score
             best_match = answer
@@ -172,18 +174,6 @@ def smart_service_search(user_message, services):
         
     matches = []
     
-    # Common service keywords mapping
-    service_keywords = {
-        'oil': ['oil change', 'oil service', 'lube'],
-        'brake': ['brake service', 'brake pad', 'brake repair'],
-        'engine': ['engine repair', 'engine diagnostic', 'tune up'],
-        'tire': ['tire rotation', 'tire service', 'wheel alignment'],
-        'ac': ['ac repair', 'air conditioning', 'ac service'],
-        'battery': ['battery replacement', 'battery service'],
-        'transmission': ['transmission service', 'transmission repair'],
-        'suspension': ['suspension repair', 'suspension service']
-    }
-    
     for service in services:
         name = preprocess_text(service['service_name'])
         desc = preprocess_text(service['description'])
@@ -196,14 +186,6 @@ def smart_service_search(user_message, services):
                 score += 2.0
             elif keyword in desc:
                 score += 1.0
-        
-        # Enhanced keyword matching using service categories
-        for category, keywords in service_keywords.items():
-            if any(cat_word in user_clean for cat_word in [category] + keywords):
-                if any(cat_word in name for cat_word in keywords):
-                    score += 3.0
-                elif any(cat_word in desc for cat_word in keywords):
-                    score += 2.0
         
         # Exact phrase bonus
         if user_clean in name:
@@ -338,8 +320,8 @@ def send_sse_message(data):
 def health():
     return jsonify({
         "status": "healthy",
-        "mode": "smart-keyword-matching",
-        "faq_file_exists": FAQ_FILE.exists()
+        "faq_file_exists": FAQ_FILE.exists(),
+        "faq_location": str(FAQ_FILE)
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -347,8 +329,8 @@ def root():
     return jsonify({
         "service": "Papsi Repair Shop Chatbot API",
         "status": "running", 
-        "version": "smart-matching-1.0",
-        "faq_entries": "using your existing faq.csv"
+        "faq_location": "root directory (corrected paths)",
+        "python_app_location": str(CURRENT_DIR)
     }), 200
 
 @app.route('/debug_faq', methods=['GET'])
@@ -356,7 +338,12 @@ def debug_faq():
     """Debug endpoint to check FAQ content"""
     try:
         if not FAQ_FILE.exists():
-            return jsonify({"error": "FAQ file not found"}), 404
+            return jsonify({
+                "error": "FAQ file not found",
+                "searched_at": str(FAQ_FILE),
+                "current_directory": str(CURRENT_DIR),
+                "root_directory": str(ROOT_DIR)
+            }), 404
             
         faq_data = pd.read_csv(FAQ_FILE)
         faq_data = faq_data.dropna(subset=['question', 'answer'])
@@ -365,6 +352,7 @@ def debug_faq():
         
         return jsonify({
             "faq_file_exists": True,
+            "faq_location": str(FAQ_FILE),
             "total_entries": len(faq_data),
             "columns": faq_data.columns.tolist(),
             "questions": faq_data['question'].tolist(),
@@ -406,7 +394,7 @@ def test_search():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Customer chatbot endpoint - RELIABLE VERSION"""
+    """Customer chatbot endpoint - WITH CORRECTED PATHS"""
     try:
         # Get and validate input
         data = request.get_json()
@@ -420,10 +408,10 @@ def chat():
         print(f"📨 Received: '{user_message}'")
         reply_parts = []
         
-        # Check FAQ with SMART matching
+        # Check FAQ with CORRECTED paths
         try:
             if not FAQ_FILE.exists():
-                print("❌ FAQ file not found")
+                print(f"❌ FAQ file not found at: {FAQ_FILE}")
                 faq_reply = None
             else:
                 faq_data = pd.read_csv(FAQ_FILE)
@@ -545,7 +533,7 @@ def admin_chat():
         question = current_question
         answer = message
 
-        # Add to FAQ
+        # Add to FAQ (using CORRECTED path)
         try:
             if FAQ_FILE.exists():
                 faq = pd.read_csv(FAQ_FILE)
@@ -554,7 +542,7 @@ def admin_chat():
                 new_row = pd.DataFrame({'question': [question], 'answer': [answer]})
                 faq = pd.concat([faq, new_row], ignore_index=True)
                 faq.to_csv(FAQ_FILE, index=False)
-                print(f"✅ Added to FAQ: {question}")
+                print(f"✅ Added to FAQ at: {FAQ_FILE}")
         except Exception as e:
             print(f"⚠️ FAQ save error: {e}")
 
@@ -602,8 +590,9 @@ def stream():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n🚀 Starting Papsi Chatbot on port {port}")
-    print("💡 Using SMART keyword matching with your existing FAQ")
-    print("📊 No AI dependencies - reliable and fast")
-    print("🎯 Optimized for auto repair domain")
+    print(f"📁 Python app location: {CURRENT_DIR}")
+    print(f"📁 FAQ file location: {FAQ_FILE}")
+    print(f"📁 FAQ file exists: {FAQ_FILE.exists()}")
+    print("💡 Using CORRECTED file paths for external FAQ")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
