@@ -91,10 +91,18 @@ function validateCSRFToken($token) {
 }
 
 // Basic activity logging (not audit trail)
+// FIXED: Added proper session checking to prevent warnings
 function logActivity($action, $details = '') {
     $logFile = 'logs/activity.log';
     $timestamp = date('Y-m-d H:i:s');
-    $userId = $_SESSION['user_id'] ?? 'guest';
+    
+    // Check if session is started and user_id exists
+    if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) {
+        $userId = $_SESSION['user_id'];
+    } else {
+        $userId = 'guest';
+    }
+    
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     
     $logEntry = "[$timestamp] User: $userId, IP: $ip, Action: $action, Details: $details\n";
