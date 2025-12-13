@@ -120,241 +120,256 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <style>
-        body {
-            background: var(--light-gray);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 30px 0;
-        }
+  <style>
+    body {
+        background: var(--light-gray);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        padding-top: 80px; /* FIXED - Changed from padding: 30px 0 */
+        padding-bottom: 30px;
+        margin: 0;
+    }
 
-        .navbar {
-            background: white;
-            box-shadow: var(--shadow-md);
-            display: flex;
-            justify-content: space-between;
-            padding: 15px 30px;
-            align-items: center;
-            border-bottom: 3px solid var(--primary-red);
-            position: relative;
-        }
-        
-        .navbar .logo {
-            color: var(--primary-red);
-            font-size: 1.8rem;
-            font-weight: 800;
-        }
-        
-        /* Mobile toggle button */
+    .navbar {
+        background: white;
+        box-shadow: var(--shadow-md);
+        display: flex;
+        justify-content: space-between;
+        padding: 15px 30px;
+        align-items: center;
+        border-bottom: 3px solid var(--primary-red);
+        position: fixed; /* FIXED - Changed from relative */
+        top: 0; /* ADDED */
+        left: 0; /* ADDED */
+        right: 0; /* ADDED */
+        z-index: 1000; /* ADDED */
+    }
+    
+    .navbar .logo {
+        color: var(--primary-red);
+        font-size: 1.8rem;
+        font-weight: 800;
+    }
+    
+    /* Mobile toggle button */
+    .navbar-toggle {
+        display: none;
+        background: var(--primary-red);
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1.2rem;
+    }
+    
+    .navbar ul {
+        list-style: none;
+        display: flex;
+        gap: 15px;
+        margin: 0;
+        padding: 0;
+        flex-wrap: wrap;
+    }
+    
+    .navbar ul li a {
+        color: var(--dark-gray);
+        text-decoration: none;
+        font-weight: 600;
+        padding: 8px 15px;
+        border-radius: var(--radius-md);
+        transition: var(--transition-fast);
+    }
+    
+    .navbar ul li a.active, 
+    .navbar ul li a:hover {
+        background: var(--gradient-primary);
+        color: white;
+    }
+    
+    .reservation-form {
+        background: white;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-xl);
+        overflow: hidden;
+        border: 2px solid rgba(220, 20, 60, 0.1);
+    }
+    
+    .form-header {
+        background: var(--gradient-primary);
+        color: white;
+        padding: 40px 30px;
+        text-align: center;
+        position: relative;
+    }
+    
+    .form-header::after {
+        content: '';
+        position: absolute;
+        bottom: -20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 20px solid transparent;
+        border-right: 20px solid transparent;
+        border-top: 20px solid var(--primary-red-dark);
+    }
+    
+    .form-header h2 {
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 0 0 10px 0;
+        color: white;
+    }
+    
+    .form-header p {
+        margin: 0;
+        opacity: 0.95;
+        font-size: 1.1rem;
+        color: white;
+    }
+    
+    .form-body {
+        padding: 50px 40px 40px;
+    }
+    
+    .form-control {
+        border-radius: var(--radius-md);
+        border: 2px solid #e0e0e0;
+        transition: var(--transition-fast);
+        padding: 12px 15px;
+        font-size: 16px; /* Prevents iOS zoom */
+    }
+    
+    .form-control:focus {
+        border-color: var(--primary-red);
+        box-shadow: 0 0 0 3px rgba(220, 20, 60, 0.1);
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: var(--black);
+        margin-bottom: 8px;
+    }
+    
+    h5 {
+        color: var(--primary-red);
+        font-weight: 700;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--primary-red);
+    }
+    
+    .btn-primary {
+        background: var(--gradient-primary);
+        border: none;
+        border-radius: var(--radius-md);
+        padding: 15px 50px;
+        font-weight: 700;
+        transition: var(--transition-normal);
+        font-size: 1.1rem;
+        letter-spacing: 0.5px;
+        min-height: 44px;
+        width: 100%;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-lg);
+    }
+    
+    .service-card {
+        border: 2px solid #e0e0e0;
+        border-radius: var(--radius-md);
+        padding: 15px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: var(--transition-normal);
+        background: white;
+    }
+    
+    .service-card:hover {
+        border-color: var(--primary-red);
+        transform: translateX(5px);
+        box-shadow: var(--shadow-md);
+    }
+    
+    .service-card.selected {
+        border-color: var(--primary-red);
+        background: #FFEBEE;
+        box-shadow: var(--shadow-md);
+    }
+    
+    .service-card strong {
+        color: var(--primary-red);
+        font-size: 1.05rem;
+    }
+    
+    .alert {
+        border-radius: var(--radius-md);
+        border: none;
+        padding: 15px 20px;
+    }
+    
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
         .navbar-toggle {
+            display: block;
+        }
+        
+        .navbar.collapsed ul {
             display: none;
-            background: var(--primary-red);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1.2rem;
         }
         
-        .navbar ul {
-            list-style: none;
-            display: flex;
-            gap: 15px;
-            margin: 0;
-            padding: 0;
-            flex-wrap: wrap;
-        }
-        
-        .navbar ul li a {
-            color: var(--dark-gray);
-            text-decoration: none;
-            font-weight: 600;
-            padding: 8px 15px;
-            border-radius: var(--radius-md);
-            transition: var(--transition-fast);
-        }
-        
-        .navbar ul li a.active, 
-        .navbar ul li a:hover {
-            background: var(--gradient-primary);
-            color: white;
-        }
-        
-        .reservation-form {
-            background: white;
-            border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-xl);
-            overflow: hidden;
-            border: 2px solid rgba(220, 20, 60, 0.1);
+        body {
+            padding-top: 70px; /* ADJUSTED for mobile navbar height */
         }
         
         .form-header {
-            background: var(--gradient-primary);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
-            position: relative;
-        }
-        
-        .form-header::after {
-            content: '';
-            position: absolute;
-            bottom: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 0;
-            border-left: 20px solid transparent;
-            border-right: 20px solid transparent;
-            border-top: 20px solid var(--primary-red-dark);
+            padding: 30px 20px;
         }
         
         .form-header h2 {
-            font-size: 2rem;
-            font-weight: 800;
-            margin: 0 0 10px 0;
-            color: white;
+            font-size: 1.5rem;
         }
         
         .form-header p {
-            margin: 0;
-            opacity: 0.95;
-            font-size: 1.1rem;
-            color: white;
+            font-size: 0.95rem;
         }
         
         .form-body {
-            padding: 50px 40px 40px;
-        }
-        
-        .form-control {
-            border-radius: var(--radius-md);
-            border: 2px solid #e0e0e0;
-            transition: var(--transition-fast);
-            padding: 12px 15px;
-            font-size: 16px; /* Prevents iOS zoom */
-        }
-        
-        .form-control:focus {
-            border-color: var(--primary-red);
-            box-shadow: 0 0 0 3px rgba(220, 20, 60, 0.1);
-        }
-        
-        .form-label {
-            font-weight: 600;
-            color: var(--black);
-            margin-bottom: 8px;
-        }
-        
-        h5 {
-            color: var(--primary-red);
-            font-weight: 700;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--primary-red);
+            padding: 30px 20px 25px;
         }
         
         .btn-primary {
-            background: var(--gradient-primary);
-            border: none;
-            border-radius: var(--radius-md);
-            padding: 15px 50px;
-            font-weight: 700;
-            transition: var(--transition-normal);
+            padding: 12px 30px;
+            font-size: 1rem;
+        }
+        
+        h5 {
             font-size: 1.1rem;
-            letter-spacing: 0.5px;
-            min-height: 44px;
-            width: 100%;
         }
         
-        .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-lg);
+        .container {
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+    }
+    
+    @media (max-width: 400px) {
+        .form-header::after {
+            display: none;
         }
         
-        .service-card {
-            border: 2px solid #e0e0e0;
-            border-radius: var(--radius-md);
-            padding: 15px;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: var(--transition-normal);
-            background: white;
+        .navbar .logo {
+            font-size: 1.4rem;
         }
         
-        .service-card:hover {
-            border-color: var(--primary-red);
-            transform: translateX(5px);
-            box-shadow: var(--shadow-md);
+        .navbar {
+            padding: 12px 20px;
         }
-        
-        .service-card.selected {
-            border-color: var(--primary-red);
-            background: #FFEBEE;
-            box-shadow: var(--shadow-md);
-        }
-        
-        .service-card strong {
-            color: var(--primary-red);
-            font-size: 1.05rem;
-        }
-        
-        .alert {
-            border-radius: var(--radius-md);
-            border: none;
-            padding: 15px 20px;
-        }
-        
-        /* Mobile responsiveness */
-        @media (max-width: 768px) {
-            .navbar-toggle {
-                display: block;
-            }
-            
-            .navbar.collapsed ul {
-                display: none;
-            }
-            
-            body {
-                padding: 80px 0 20px;
-            }
-            
-            .form-header {
-                padding: 30px 20px;
-            }
-            
-            .form-header h2 {
-                font-size: 1.5rem;
-            }
-            
-            .form-header p {
-                font-size: 0.95rem;
-            }
-            
-            .form-body {
-                padding: 30px 20px 25px;
-            }
-            
-            .btn-primary {
-                padding: 12px 30px;
-                font-size: 1rem;
-            }
-            
-            h5 {
-                font-size: 1.1rem;
-            }
-        }
-        
-        @media (max-width: 400px) {
-            .form-header::after {
-                display: none;
-            }
-            
-            .navbar .logo {
-                font-size: 1.4rem;
-            }
-        }
-    </style>
+    }
+</style>
 </head>
 <body>
 <!-- Navbar with mobile toggle -->
