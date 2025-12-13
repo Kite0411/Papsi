@@ -1,0 +1,841 @@
+/* ===================================
+   PAPSI PAPS ADMIN PANEL
+   MOBILE RESPONSIVE STYLES
+   =================================== */
+
+/* ===================================
+   GLOBAL MOBILE ADJUSTMENTS
+   =================================== */
+
+@media (max-width: 768px) {
+    /* Base adjustments */
+    body {
+        font-size: 14px;
+        padding: 0;
+        overflow-x: hidden;
+    }
+    
+    .container {
+        margin-top: 70px !important;
+        padding: 0 15px;
+        max-width: 100%;
+    }
+    
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.3rem; }
+    h3 { font-size: 1.1rem; }
+    h4 { font-size: 1rem; }
+    
+    /* Buttons */
+    .btn {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+    
+    .btn-lg {
+        padding: 12px 24px;
+        font-size: 15px;
+    }
+    
+    .btn-sm {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+}
+
+/* ===================================
+   NAVBAR RESPONSIVE
+   =================================== */
+
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        padding: 10px 15px;
+        gap: 15px;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+    }
+    
+    .navbar .logo {
+        font-size: 1.4rem;
+        text-align: center;
+        width: 100%;
+    }
+    
+    .navbar ul {
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .navbar ul li {
+        width: 100%;
+    }
+    
+    .navbar ul li a {
+        display: block;
+        width: 100%;
+        text-align: center;
+        padding: 10px 15px;
+        font-size: 14px;
+    }
+    
+    /* Hamburger menu alternative */
+    .navbar.collapsed ul {
+        display: none;
+    }
+    
+    .navbar-toggle {
+        display: block;
+        background: var(--primary-red);
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+    }
+    
+    .navbar-toggle::after {
+        content: '☰';
+        float: right;
+        font-size: 1.5rem;
+    }
+    
+    .navbar.expanded .navbar-toggle::after {
+        content: '✕';
+    }
+}
+
+/* ===================================
+   CARDS & DASHBOARD
+   =================================== */
+
+@media (max-width: 768px) {
+    .card {
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 10px;
+    }
+    
+    .card-header {
+        padding: 15px;
+        margin: -15px -15px 15px -15px;
+        font-size: 1rem;
+    }
+    
+    .dashboard {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .stat-card {
+        padding: 15px;
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+    }
+    
+    /* Status Summary Cards */
+    .status-summary {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .status-card {
+        padding: 15px;
+    }
+    
+    .status-card .count {
+        font-size: 2rem;
+    }
+    
+    .status-card .icon {
+        font-size: 2rem;
+    }
+}
+
+/* ===================================
+   TABLES RESPONSIVE
+   =================================== */
+
+@media (max-width: 768px) {
+    /* Hide table headers */
+    table thead {
+        display: none;
+    }
+    
+    /* Stack table rows */
+    table, tbody, tr, td {
+        display: block;
+        width: 100%;
+    }
+    
+    table tr {
+        background: white;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        padding: 15px;
+        border: 1px solid #e0e0e0;
+    }
+    
+    table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 10px 0;
+        border-bottom: 1px solid #f0f0f0;
+        text-align: left;
+    }
+    
+    table td:last-child {
+        border-bottom: none;
+    }
+    
+    /* Add labels before content */
+    table td::before {
+        content: attr(data-label);
+        font-weight: 700;
+        color: var(--primary-red);
+        flex-basis: 45%;
+        text-align: left;
+        padding-right: 10px;
+    }
+    
+    table td > * {
+        flex-basis: 55%;
+        text-align: right;
+    }
+    
+    /* Action buttons */
+    table td:last-child {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    table td:last-child::before {
+        display: none;
+    }
+    
+    table a,
+    table button {
+        width: 100%;
+        text-align: center;
+        margin: 4px 0;
+        display: block;
+    }
+}
+
+/* ===================================
+   FORMS RESPONSIVE
+   =================================== */
+
+@media (max-width: 768px) {
+    .form-group {
+        margin-bottom: 15px;
+    }
+    
+    .form-control {
+        font-size: 16px; /* Prevents zoom on iOS */
+        padding: 10px 12px;
+    }
+    
+    .form-label {
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+    
+    /* Service Cards */
+    .service-card {
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    
+    .service-card strong {
+        font-size: 14px;
+    }
+    
+    .service-card small {
+        font-size: 12px;
+    }
+    
+    /* Payment/Reservation Forms */
+    .reservation-form,
+    .payment-container {
+        margin: 20px 10px;
+        border-radius: 15px;
+    }
+    
+    .form-header {
+        padding: 25px 20px;
+    }
+    
+    .form-header h2 {
+        font-size: 1.5rem;
+    }
+    
+    .form-header p {
+        font-size: 0.95rem;
+    }
+    
+    .form-body {
+        padding: 30px 20px;
+    }
+    
+    /* Two-column layouts to single column */
+    .row .col-md-6,
+    .row .col-md-4 {
+        width: 100%;
+        margin-bottom: 20px;
+    }
+}
+
+/* ===================================
+   MODALS RESPONSIVE
+   =================================== */
+
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 10px;
+        max-width: calc(100% - 20px);
+    }
+    
+    .modal-content {
+        border-radius: 12px;
+    }
+    
+    .modal-header {
+        padding: 15px 20px;
+    }
+    
+    .modal-title {
+        font-size: 1.1rem;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .modal-footer {
+        padding: 15px 20px;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .modal-footer .btn {
+        width: 100%;
+        margin: 0;
+    }
+    
+    /* Confirm modals */
+    .confirm-modal {
+        padding: 15px;
+    }
+    
+    .confirm-box {
+        width: calc(100% - 30px);
+        max-width: 100%;
+        padding: 20px;
+    }
+    
+    .confirm-buttons {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .confirm-buttons button {
+        width: 100%;
+    }
+}
+
+/* ===================================
+   ALERTS & NOTIFICATIONS
+   =================================== */
+
+@media (max-width: 768px) {
+    .alert {
+        padding: 12px 15px;
+        font-size: 14px;
+        margin-bottom: 15px;
+    }
+    
+    .notif-toast {
+        left: 10px;
+        right: 10px;
+        transform: translateX(0);
+        width: calc(100% - 20px);
+        max-width: calc(100% - 20px);
+        padding: 12px 20px;
+        font-size: 14px;
+    }
+    
+    .notif-toast.show {
+        transform: translateX(0) translateY(0);
+    }
+}
+
+/* ===================================
+   PAYMENT SPECIFIC
+   =================================== */
+
+@media (max-width: 768px) {
+    .payment-container {
+        margin: 20px 10px;
+    }
+    
+    .payment-header {
+        padding: 30px 20px;
+    }
+    
+    .payment-header h2 {
+        font-size: 1.5rem;
+    }
+    
+    .payment-body {
+        padding: 30px 20px;
+    }
+    
+    .service-summary {
+        padding: 20px;
+    }
+    
+    .service-summary h4 {
+        font-size: 1.1rem;
+    }
+    
+    .total-amount {
+        font-size: 1.5rem;
+        padding: 15px;
+        margin: 20px 0;
+    }
+    
+    .qr-placeholder {
+        padding: 25px 15px;
+    }
+    
+    .upload-area {
+        padding: 25px 15px;
+    }
+    
+    .instruction-box {
+        padding: 15px;
+        margin: 20px 0;
+    }
+    
+    .instruction-box h5 {
+        font-size: 1rem;
+    }
+    
+    .instruction-box ol {
+        padding-left: 20px;
+    }
+    
+    .instruction-box li {
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+}
+
+/* ===================================
+   AUDIT TRAIL SPECIFIC
+   =================================== */
+
+@media (max-width: 768px) {
+    .filter-card {
+        padding: 15px;
+    }
+    
+    .filter-card .row {
+        gap: 15px;
+    }
+    
+    .filter-card .col-md-4 {
+        width: 100%;
+    }
+    
+    .filter-card .btn {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    /* Stats cards */
+    .stats-card {
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .stats-card h3 {
+        font-size: 1.8rem;
+    }
+    
+    /* Badge styling */
+    .badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+    }
+}
+
+/* ===================================
+   WALK-IN / RESERVATION FORMS
+   =================================== */
+
+@media (max-width: 768px) {
+    /* Quick questions */
+    .quick-questions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .quick-question {
+        width: 100%;
+        text-align: center;
+        padding: 8px 15px;
+    }
+    
+    /* Time selection */
+    #reservation_time {
+        font-size: 16px;
+    }
+    
+    /* Service selection cards */
+    .service-card {
+        margin-bottom: 10px;
+    }
+    
+    .service-card .form-check-label {
+        font-size: 14px;
+    }
+}
+
+/* ===================================
+   CHATBOT RESPONSIVE
+   =================================== */
+
+@media (max-width: 768px) {
+    .chatbot-container {
+        width: calc(100vw - 20px);
+        right: 10px;
+        bottom: 10px;
+        left: 10px;
+    }
+    
+    .chatbot-header {
+        padding: 12px 15px;
+    }
+    
+    .chatbot-header h3 {
+        font-size: 14px;
+    }
+    
+    .chatbot-body {
+        height: 350px;
+    }
+    
+    .chatbot-messages {
+        max-height: 250px;
+        padding: 12px;
+    }
+    
+    .chatbot-input {
+        padding: 12px;
+    }
+    
+    .chatbot-input input {
+        font-size: 14px;
+        padding: 8px 12px;
+    }
+    
+    .message-content {
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+    
+    .chatbot-welcome h4 {
+        font-size: 1rem;
+    }
+    
+    .chatbot-welcome p {
+        font-size: 12px;
+    }
+}
+
+/* ===================================
+   PAGINATION
+   =================================== */
+
+@media (max-width: 768px) {
+    .pagination {
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: center;
+    }
+    
+    .page-item {
+        margin: 2px;
+    }
+    
+    .page-link {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+}
+
+/* ===================================
+   CHARTS & GRAPHS
+   =================================== */
+
+@media (max-width: 768px) {
+    .chart-container {
+        height: 250px;
+        margin: 15px 0;
+    }
+    
+    canvas {
+        max-width: 100%;
+        height: auto !important;
+    }
+}
+
+/* ===================================
+   ARCHIVED ITEMS
+   =================================== */
+
+@media (max-width: 768px) {
+    .archived-item {
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .archived-item img {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+/* ===================================
+   FILTER BAR
+   =================================== */
+
+@media (max-width: 768px) {
+    .filter-bar {
+        padding: 15px;
+    }
+    
+    .filter-bar h5 {
+        font-size: 1rem;
+        margin-bottom: 15px;
+    }
+    
+    .filter-bar .d-flex {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .filter-btn {
+        width: 100%;
+        min-width: auto;
+        padding: 12px;
+        font-size: 14px;
+    }
+}
+
+/* ===================================
+   IMAGE PREVIEWS
+   =================================== */
+
+@media (max-width: 768px) {
+    .preview-image,
+    .payment-proof {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .modal-img {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+/* ===================================
+   UTILITY CLASSES FOR MOBILE
+   =================================== */
+
+@media (max-width: 768px) {
+    .mobile-hide {
+        display: none !important;
+    }
+    
+    .mobile-show {
+        display: block !important;
+    }
+    
+    .mobile-full-width {
+        width: 100% !important;
+    }
+    
+    .mobile-text-center {
+        text-align: center !important;
+    }
+    
+    .mobile-stack {
+        flex-direction: column !important;
+    }
+}
+
+/* ===================================
+   TOUCH TARGETS (44x44px minimum)
+   =================================== */
+
+@media (max-width: 768px) {
+    button,
+    .btn,
+    a.btn,
+    input[type="submit"],
+    input[type="button"],
+    .clickable {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Checkbox and radio larger touch targets */
+    .form-check-input {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .form-check-label {
+        padding-left: 10px;
+    }
+}
+
+/* ===================================
+   LANDSCAPE ORIENTATION
+   =================================== */
+
+@media (max-width: 768px) and (orientation: landscape) {
+    .container {
+        margin-top: 60px;
+    }
+    
+    .chatbot-body {
+        height: 250px;
+    }
+    
+    .chatbot-messages {
+        max-height: 180px;
+    }
+    
+    .modal-dialog {
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+}
+
+/* ===================================
+   VERY SMALL SCREENS (< 400px)
+   =================================== */
+
+@media (max-width: 400px) {
+    .container {
+        padding: 0 10px;
+    }
+    
+    .card {
+        padding: 12px;
+    }
+    
+    .form-body {
+        padding: 20px 15px;
+    }
+    
+    .btn {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    h1 { font-size: 1.3rem; }
+    h2 { font-size: 1.2rem; }
+    h3 { font-size: 1.05rem; }
+    
+    .navbar .logo {
+        font-size: 1.2rem;
+    }
+    
+    .stat-number {
+        font-size: 1.8rem;
+    }
+}
+
+/* ===================================
+   PRINT STYLES (MOBILE)
+   =================================== */
+
+@media print {
+    .navbar,
+    .chatbot-container,
+    .btn,
+    .notif-toast,
+    .modal {
+        display: none !important;
+    }
+    
+    body {
+        background: white;
+    }
+    
+    .card {
+        border: 1px solid #ddd;
+        box-shadow: none;
+        page-break-inside: avoid;
+    }
+    
+    table {
+        page-break-inside: auto;
+    }
+    
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+}
+
+/* ===================================
+   ACCESSIBILITY IMPROVEMENTS
+   =================================== */
+
+@media (max-width: 768px) {
+    /* Focus indicators */
+    button:focus,
+    a:focus,
+    input:focus,
+    select:focus,
+    textarea:focus {
+        outline: 3px solid var(--primary-red);
+        outline-offset: 2px;
+    }
+    
+    /* Skip to content link */
+    .skip-to-content {
+        position: absolute;
+        top: -40px;
+        left: 0;
+        background: var(--primary-red);
+        color: white;
+        padding: 8px 16px;
+        text-decoration: none;
+        z-index: 10000;
+    }
+    
+    .skip-to-content:focus {
+        top: 0;
+    }
+}
