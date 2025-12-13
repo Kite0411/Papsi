@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reservation_date = $_POST['reservation_date'];
     $reservation_time = $_POST['reservation_time'];
     $selected_services = $_POST['services'] ?? [];
-    $method = sanitizeInput($_POST['method'] ?? 'Walk-In'); // Default to Walk-In
+    $method = sanitizeInput($_POST['method'] ?? 'Walk-In');
 
     if (
         empty($name) || empty($phone) || empty($email) || empty($vehicle_make) ||
@@ -58,17 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Compute end_time
             $end_time = date("H:i:s", strtotime($reservation_time) + ($total_duration * 60));
 
-            // Insert reservation with method
-           // Insert reservation with method and set status as 'pending_verification'
-$stmt2 = $conn->prepare("
-    INSERT INTO reservations 
-    (customer_id, vehicle_make, vehicle_model, vehicle_year, reservation_date, reservation_time, end_time, method, status) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-");
-$stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $vehicle_year, $reservation_date, $reservation_time, $end_time, $method, $status);
-
-// Set default status as 'pending_verification'
-        $status = 'pending_verification';
+            // Insert reservation with method and set status as 'pending_verification'
+            $stmt2 = $conn->prepare("
+                INSERT INTO reservations 
+                (customer_id, vehicle_make, vehicle_model, vehicle_year, reservation_date, reservation_time, end_time, method, status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            
+            // Set default status as 'pending_verification'
+            $status = 'pending_verification';
+            $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $vehicle_year, $reservation_date, $reservation_time, $end_time, $method, $status);
 
             if ($stmt2->execute()) {
                 $reservation_id = $conn->insert_id;
@@ -80,11 +79,11 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
                     $stmt3->execute();
                 }
 
-                // ✅ Log description for audit trail
+                // Log description for audit trail
                 $desc = "Walk-in reservation added by " . $_SESSION['username'] . 
                         " for customer: $name ($vehicle_make $vehicle_model, $vehicle_year)";
 
-                // ✅ Redirect or message depending on method
+                // Redirect or message depending on method
                 if ($method === 'Online') {
                     $_SESSION['reservation_id'] = $reservation_id;
                     $_SESSION['customer_id'] = $customer_id;
@@ -108,8 +107,6 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
         $stmt->close();
     }
 }
-
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -119,7 +116,9 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
     <title>Book Reservation - AutoFix</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
         body {
@@ -128,7 +127,7 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
             padding: 30px 0;
         }
 
-                .navbar {
+        .navbar {
             background: white;
             box-shadow: var(--shadow-md);
             display: flex;
@@ -136,12 +135,25 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
             padding: 15px 30px;
             align-items: center;
             border-bottom: 3px solid var(--primary-red);
+            position: relative;
         }
         
         .navbar .logo {
             color: var(--primary-red);
             font-size: 1.8rem;
             font-weight: 800;
+        }
+        
+        /* Mobile toggle button */
+        .navbar-toggle {
+            display: none;
+            background: var(--primary-red);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
         }
         
         .navbar ul {
@@ -162,7 +174,8 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
             transition: var(--transition-fast);
         }
         
-        .navbar ul li a.active, .navbar ul li a:hover {
+        .navbar ul li a.active, 
+        .navbar ul li a:hover {
             background: var(--gradient-primary);
             color: white;
         }
@@ -219,6 +232,7 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
             border: 2px solid #e0e0e0;
             transition: var(--transition-fast);
             padding: 12px 15px;
+            font-size: 16px; /* Prevents iOS zoom */
         }
         
         .form-control:focus {
@@ -249,6 +263,8 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
             transition: var(--transition-normal);
             font-size: 1.1rem;
             letter-spacing: 0.5px;
+            min-height: 44px;
+            width: 100%;
         }
         
         .btn-primary:hover {
@@ -288,217 +304,303 @@ $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $ve
             border: none;
             padding: 15px 20px;
         }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .navbar-toggle {
+                display: block;
+            }
+            
+            .navbar.collapsed ul {
+                display: none;
+            }
+            
+            body {
+                padding: 80px 0 20px;
+            }
+            
+            .form-header {
+                padding: 30px 20px;
+            }
+            
+            .form-header h2 {
+                font-size: 1.5rem;
+            }
+            
+            .form-header p {
+                font-size: 0.95rem;
+            }
+            
+            .form-body {
+                padding: 30px 20px 25px;
+            }
+            
+            .btn-primary {
+                padding: 12px 30px;
+                font-size: 1rem;
+            }
+            
+            h5 {
+                font-size: 1.1rem;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .form-header::after {
+                display: none;
+            }
+            
+            .navbar .logo {
+                font-size: 1.4rem;
+            }
+        }
     </style>
 </head>
 <body>
-<nav class="navbar">
-    <div class="logo"> Papsi Paps Admin</div>
-    <ul>
+<!-- Navbar with mobile toggle -->
+<nav class="navbar collapsed" id="adminNavbar">
+    <div class="logo">🔧 Papsi Paps Admin</div>
+    
+    <button class="navbar-toggle" onclick="toggleNav()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <ul id="navMenu">
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="index.php">Dashboard</a></li>
         <?php endif; ?>
-        <!-- Always visible -->
         <li><a href="walk_in.php" class="active">Manage Walk-In</a></li>
         <li><a href="manage_payments.php">Payments</a></li>
-                  <?php if ($_SESSION['role'] === 'superadmin'): ?>
-        <li><a href="manage_services.php">Manage Services</a></li>
-                <?php endif; ?>
+        <?php if ($_SESSION['role'] === 'superadmin'): ?>
+            <li><a href="manage_services.php">Manage Services</a></li>
+        <?php endif; ?>
         <li><a href="manage_reservations.php">Reservations</a></li>
-
-        <!-- Only visible to Super Admin -->
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
-
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
     </ul>
 </nav>
-    <div class="container py-5 mt-5">
-        <div class="row justify-content-center">
-            <div class="col-lg-8">
-                <div class="reservation-form">
-                    <div class="form-header">
-                        <h2>🚗 Book Your Auto Service</h2>
-                        <p>Schedule your appointment with AutoFix - Professional service guaranteed</p>
-                    </div>
-                    
-                    <div class="form-body">
-                        <?php if ($message): ?>
-                            <div class="alert alert-<?php echo $messageType; ?> alert-dismissible fade show">
-                                <?php echo htmlspecialchars($message); ?>
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        <?php endif; ?>
 
-                        <form method="post">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h5 class="mb-3">Personal Information</h5>
-                                    <div class="mb-3">
-                                        <label class="form-label">Full Name</label>
-                                        <input type="text" name="name" class="form-control" value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Phone Number</label>
-                                        <input type="tel" name="phone" class="form-control" value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Email</label>
-                                        <input type="email" name="email" class="form-control" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" required>
-                                    </div>
+<div class="container py-5 mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="reservation-form">
+                <div class="form-header">
+                    <h2>🚗 Book Your Auto Service</h2>
+                    <p>Schedule your appointment with AutoFix - Professional service guaranteed</p>
+                </div>
+                
+                <div class="form-body">
+                    <?php if ($message): ?>
+                        <div class="alert alert-<?php echo $messageType; ?> alert-dismissible fade show">
+                            <?php echo htmlspecialchars($message); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="post">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5 class="mb-3">Personal Information</h5>
+                                <div class="mb-3">
+                                    <label class="form-label">Full Name</label>
+                                    <input type="text" name="name" class="form-control" value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>" required>
                                 </div>
-                                
-                                <div class="col-md-6">
-                                    <h5 class="mb-3">Vehicle Information</h5>
-                                    <div class="mb-3">
-                                        <label class="form-label">Vehicle Make</label>
-                                        <input type="text" name="vehicle_make" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_make'] ?? ''); ?>" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Vehicle Model</label>
-                                        <input type="text" name="vehicle_model" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_model'] ?? ''); ?>" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Vehicle Year</label>
-                                        <input type="text" name="vehicle_year" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_year'] ?? ''); ?>" required>
-                                    </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Phone Number</label>
+                                    <input type="tel" name="phone" class="form-control" value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" name="email" class="form-control" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" required>
                                 </div>
                             </div>
                             
-                            <div class="row mt-4">
-                                <div class="col-md-6">
-                                    <h5 class="mb-3">Appointment Details</h5>
-                                    <div class="mb-3">
-                                        <label class="form-label">Preferred Date</label>
-                                        <input 
-                                            type="text" 
-                                            id="reservation_date"
-                                            name="reservation_date" 
-                                            class="form-control" 
-                                            placeholder="Select date"
-                                            value="<?php echo $_POST['reservation_date'] ?? ''; ?>" 
-                                            required >
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Preferred Time</label>
-                                        <select 
-                                            name="reservation_time" 
-                                            id="reservation_time"
-                                            class="form-control" 
-                                            required
-                                        >
-                                            <option value="">Select time</option>
-                                        </select>
-                                    </div>
+                            <div class="col-md-6">
+                                <h5 class="mb-3">Vehicle Information</h5>
+                                <div class="mb-3">
+                                    <label class="form-label">Vehicle Make</label>
+                                    <input type="text" name="vehicle_make" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_make'] ?? ''); ?>" required>
                                 </div>
-                                
-                                <div class="col-md-6">
-                                    <h5 class="mb-3">Select Services</h5>
-                                    <?php while ($service = mysqli_fetch_assoc($services)) { ?>
-                                        <div class="service-card" onclick="toggleService(<?php echo $service['id']; ?>)">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="services[]" value="<?php echo $service['id']; ?>" id="service_<?php echo $service['id']; ?>">
-                                                <label class="form-check-label" for="service_<?php echo $service['id']; ?>">
-                                                    <strong><?php echo htmlspecialchars($service['service_name']); ?></strong>
-                                                    <br>
-                                                    <small class="text-muted">
-                                                        Duration: <?php echo $service['duration']; ?> | 
-                                                        Price: $<?php echo number_format($service['price'], 2); ?>
-                                                    </small>
-                                                </label>
-                                            </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Vehicle Model</label>
+                                    <input type="text" name="vehicle_model" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_model'] ?? ''); ?>" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Vehicle Year</label>
+                                    <input type="text" name="vehicle_year" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_year'] ?? ''); ?>" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h5 class="mb-3">Appointment Details</h5>
+                                <div class="mb-3">
+                                    <label class="form-label">Preferred Date</label>
+                                    <input 
+                                        type="text" 
+                                        id="reservation_date"
+                                        name="reservation_date" 
+                                        class="form-control" 
+                                        placeholder="Select date"
+                                        value="<?php echo $_POST['reservation_date'] ?? ''; ?>" 
+                                        required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Preferred Time</label>
+                                    <select 
+                                        name="reservation_time" 
+                                        id="reservation_time"
+                                        class="form-control" 
+                                        required>
+                                        <option value="">Select time</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h5 class="mb-3">Select Services</h5>
+                                <?php while ($service = mysqli_fetch_assoc($services)) { ?>
+                                    <div class="service-card" onclick="toggleService(<?php echo $service['id']; ?>)">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="services[]" value="<?php echo $service['id']; ?>" id="service_<?php echo $service['id']; ?>">
+                                            <label class="form-check-label" for="service_<?php echo $service['id']; ?>">
+                                                <strong><?php echo htmlspecialchars($service['service_name']); ?></strong>
+                                                <br>
+                                                <small class="text-muted">
+                                                    Duration: <?php echo $service['duration']; ?> | 
+                                                    Price: ₱<?php echo number_format($service['price'], 2); ?>
+                                                </small>
+                                            </label>
                                         </div>
-                                    <?php } ?>
-                                </div>
+                                    </div>
+                                <?php } ?>
                             </div>
-                            
-                            <div class="text-center mt-4">
-                                <button type="submit" class="btn btn-primary btn-lg">Book Appointment</button>
-                            </div>
-                        </form>
-                    </div>
+                        </div>
+                        
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">Book Appointment</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
 <?php include "logout-modal.php" ?>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function toggleService(serviceId) {
-            const checkbox = document.getElementById('service_' + serviceId);
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Mobile navbar toggle
+    function toggleNav() {
+        const navbar = document.getElementById('adminNavbar');
+        const icon = document.querySelector('.navbar-toggle i');
+        
+        if (navbar.classList.contains('collapsed')) {
+            navbar.classList.remove('collapsed');
+            icon.classList.remove('fa-bars');
+            icon.classList.add('fa-times');
+        } else {
+            navbar.classList.add('collapsed');
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-bars');
+        }
+    }
+
+    // Auto-collapse on window resize
+    window.addEventListener('resize', function() {
+        const navbar = document.getElementById('adminNavbar');
+        if (window.innerWidth > 768) {
+            navbar.classList.remove('collapsed');
+            const icon = document.querySelector('.navbar-toggle i');
+            if (icon) {
+                icon.classList.remove('fa-times');
+                icon.classList.add('fa-bars');
+            }
+        }
+    });
+
+    // Service card toggle
+    function toggleService(serviceId) {
+        const checkbox = document.getElementById('service_' + serviceId);
+        const card = checkbox.closest('.service-card');
+        
+        checkbox.checked = !checkbox.checked;
+        
+        if (checkbox.checked) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    }
+    
+    // Initialize selected services
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkboxes = document.querySelectorAll('input[name="services[]"]');
+        checkboxes.forEach(checkbox => {
             const card = checkbox.closest('.service-card');
-            
-            checkbox.checked = !checkbox.checked;
-            
             if (checkbox.checked) {
                 card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
             }
-        }
-        
-        // Initialize selected services
-        document.addEventListener('DOMContentLoaded', function() {
-            const checkboxes = document.querySelectorAll('input[name="services[]"]');
-            checkboxes.forEach(checkbox => {
-                const card = checkbox.closest('.service-card');
-                if (checkbox.checked) {
-                    card.classList.add('selected');
-                }
-            });
         });
-        flatpickr("#reservation_date", {
-            dateFormat: "Y-m-d",
-            minDate: "today",
-            disable: [
-                function(date) {
-                    return date.getDay() === 0; // Disable Sunday
-                }
-            ]
+    });
+    
+    // Initialize flatpickr
+    flatpickr("#reservation_date", {
+        dateFormat: "Y-m-d",
+        minDate: "today",
+        disable: [
+            function(date) {
+                return date.getDay() === 0; // Disable Sunday
+            }
+        ]
+    });
+
+    function getSelectedServiceIds() {
+        const ids = [];
+        document.querySelectorAll('input[name="services[]"]:checked').forEach(cb => {
+            ids.push(cb.value);
         });
+        return ids;
+    }
 
-        function getSelectedServiceIds() {
-            const ids = [];
-            document.querySelectorAll('input[name="services[]"]:checked').forEach(cb => {
-                ids.push(cb.value);
-            });
-            return ids;
-        }
+    async function loadAvailableTimes() {
+        const date = document.getElementById('reservation_date').value;
+        const serviceIds = getSelectedServiceIds();
+        const timeSelect = document.getElementById('reservation_time');
+        timeSelect.innerHTML = '<option>Loading...</option>';
 
-        async function loadAvailableTimes() {
-            const date = document.getElementById('reservation_date').value;
-            const serviceIds = getSelectedServiceIds();
-            const timeSelect = document.getElementById('reservation_time');
-            timeSelect.innerHTML = '<option>Loading...</option>';
-
-            if (!date || serviceIds.length === 0) {
-                timeSelect.innerHTML = '<option value="">Select date & services first</option>';
-                return;
-            }
-
-            const res = await fetch(`../reservations/get_available_times.php?date=${date}&services=${serviceIds.join(',')}`);
-            const times = await res.json();
-
-            timeSelect.innerHTML = '';
-            if (times.length === 0) {
-                timeSelect.innerHTML = '<option value="">No available slots</option>';
-                return;
-            }
-
-            timeSelect.innerHTML = '<option value="">Select time</option>';
-            times.forEach(t => {
-                const option = document.createElement('option');
-                option.value = t;
-                option.textContent = new Date(`1970-01-01T${t}:00`)
-                    .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                timeSelect.appendChild(option);
-            });
+        if (!date || serviceIds.length === 0) {
+            timeSelect.innerHTML = '<option value="">Select date & services first</option>';
+            return;
         }
 
-        document.getElementById('reservation_date').addEventListener('change', loadAvailableTimes);
-        document.querySelectorAll('input[name="services[]"]').forEach(cb => {
-            cb.addEventListener('change', loadAvailableTimes);
+        const res = await fetch(`../reservations/get_available_times.php?date=${date}&services=${serviceIds.join(',')}`);
+        const times = await res.json();
+
+        timeSelect.innerHTML = '';
+        if (times.length === 0) {
+            timeSelect.innerHTML = '<option value="">No available slots</option>';
+            return;
+        }
+
+        timeSelect.innerHTML = '<option value="">Select time</option>';
+        times.forEach(t => {
+            const option = document.createElement('option');
+            option.value = t;
+            option.textContent = new Date(`1970-01-01T${t}:00`)
+                .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            timeSelect.appendChild(option);
         });
-    </script>
+    }
+
+    document.getElementById('reservation_date').addEventListener('change', loadAvailableTimes);
+    document.querySelectorAll('input[name="services[]"]').forEach(cb => {
+        cb.addEventListener('change', loadAvailableTimes);
+    });
+</script>
 </body>
 </html>
