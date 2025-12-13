@@ -166,18 +166,96 @@ $reservations_result = $reservations_stmt->get_result();
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Manage Reservations - Auto Repair Admin</title>
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 <style>
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--light-gray); margin:0; }
-.navbar { background:white; display:flex; justify-content:space-between; padding:15px 30px; align-items:center; border-bottom:3px solid var(--primary-red); box-shadow:var(--shadow-md); }
-.navbar .logo { color:var(--primary-red); font-size:1.8rem; font-weight:800; }
-.navbar ul { list-style:none; display:flex; gap:15px; margin:0; padding:0; flex-wrap:wrap; }
-.navbar ul li a { color:var(--dark-gray); text-decoration:none; font-weight:600; padding:8px 15px; border-radius:var(--radius-md); transition:var(--transition-fast); }
-.navbar ul li a.active, .navbar ul li a:hover { background: var(--gradient-primary); color:white; }
-.container { max-width: 1100px; margin: 100px auto; padding: 0 20px; }
-h1 { text-align:center; margin-bottom:30px; font-weight:800; }
-.card { background:white; padding:30px; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); border:2px solid rgba(220,20,60,0.1); margin-bottom:25px; }
+body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    background: var(--light-gray); 
+    margin: 0;
+    padding-top: 80px;
+    padding-bottom: 30px;
+}
 
-/* Status Table Styles */
+.navbar { 
+    background: white; 
+    display: flex; 
+    justify-content: space-between; 
+    padding: 15px 30px; 
+    align-items: center; 
+    border-bottom: 3px solid var(--primary-red); 
+    box-shadow: var(--shadow-md);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+}
+
+.navbar .logo { 
+    color: var(--primary-red); 
+    font-size: 1.8rem; 
+    font-weight: 800; 
+}
+
+/* Mobile toggle button */
+.navbar-toggle {
+    display: none;
+    background: var(--primary-red);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.2rem;
+}
+
+.navbar ul { 
+    list-style: none; 
+    display: flex; 
+    gap: 15px; 
+    margin: 0; 
+    padding: 0; 
+    flex-wrap: wrap; 
+}
+
+.navbar ul li a { 
+    color: var(--dark-gray); 
+    text-decoration: none; 
+    font-weight: 600; 
+    padding: 8px 15px; 
+    border-radius: var(--radius-md); 
+    transition: var(--transition-fast); 
+}
+
+.navbar ul li a.active, 
+.navbar ul li a:hover { 
+    background: var(--gradient-primary); 
+    color: white; 
+}
+
+.container { 
+    max-width: 1100px; 
+    margin: 20px auto; 
+    padding: 0 20px; 
+}
+
+h1 { 
+    text-align: center; 
+    margin-bottom: 30px; 
+    font-weight: 800; 
+}
+
+.card { 
+    background: white; 
+    padding: 30px; 
+    border-radius: var(--radius-lg); 
+    box-shadow: var(--shadow-md); 
+    border: 2px solid rgba(220,20,60,0.1); 
+    margin-bottom: 25px; 
+}
+
+/* Status Summary Cards */
 .status-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -250,22 +328,114 @@ h1 { text-align:center; margin-bottom:30px; font-weight:800; }
     margin-bottom: 10px;
 }
 
-table { width:100%; border-collapse:collapse; }
-table th, table td { padding:15px; text-align:left; }
-table th { background: var(--gradient-primary); color:white; font-weight:700; }
-table tr:nth-child(even) { background: var(--light-gray); }
-table tr:hover { background:#FFEBEE; }
-table a { text-decoration:none; color:var(--primary-red); font-weight:600; margin-right:10px; transition:var(--transition-fast); }
-table a:hover { color:var(--primary-red-dark); text-decoration:underline; }
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+}
 
-.notif-toast { position: fixed; top:25px; left:50%; transform:translateX(-50%) translateY(-20px); color:white; padding:15px 35px; border-radius:8px; font-weight:600; font-size:1rem; text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.2); opacity:0; transition:opacity 0.4s ease, transform 0.4s ease; z-index:9999; }
-.notif-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
-.confirm-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; }
-.confirm-box { background:white; padding:25px 30px; border-radius:10px; text-align:center; max-width:400px; width:90%; box-shadow:0 5px 20px rgba(0,0,0,0.2); }
-.confirm-box h3 { margin-bottom:15px; color:#b71c1c; }
-.confirm-box button { border:none; padding:10px 20px; border-radius:5px; margin:0 10px; cursor:pointer; font-weight:bold; }
-.confirm-yes { background:#d32f2f; color:white; }
-.confirm-no { background:#ccc; }
+table th, 
+table td { 
+    padding: 15px; 
+    text-align: left; 
+}
+
+table th { 
+    background: var(--gradient-primary); 
+    color: white; 
+    font-weight: 700; 
+}
+
+table tr:nth-child(even) { 
+    background: var(--light-gray); 
+}
+
+table tr:hover { 
+    background: #FFEBEE; 
+}
+
+table a { 
+    text-decoration: none; 
+    color: var(--primary-red); 
+    font-weight: 600; 
+    margin-right: 10px; 
+    transition: var(--transition-fast); 
+}
+
+table a:hover { 
+    color: var(--primary-red-dark); 
+    text-decoration: underline; 
+}
+
+.notif-toast { 
+    position: fixed; 
+    top: 90px; 
+    left: 50%; 
+    transform: translateX(-50%) translateY(-20px); 
+    color: white; 
+    padding: 15px 35px; 
+    border-radius: 8px; 
+    font-weight: 600; 
+    font-size: 1rem; 
+    text-align: center; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+    opacity: 0; 
+    transition: opacity 0.4s ease, transform 0.4s ease; 
+    z-index: 9999;
+    max-width: 90%;
+}
+
+.notif-toast.show { 
+    opacity: 1; 
+    transform: translateX(-50%) translateY(0); 
+}
+
+.confirm-modal { 
+    display: none; 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0,0,0,0.6); 
+    justify-content: center; 
+    align-items: center;
+    z-index: 9999;
+}
+
+.confirm-box { 
+    background: white; 
+    padding: 25px 30px; 
+    border-radius: 10px; 
+    text-align: center; 
+    max-width: 400px; 
+    width: 90%; 
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2); 
+}
+
+.confirm-box h3 { 
+    margin-bottom: 15px; 
+    color: #b71c1c; 
+}
+
+.confirm-box button { 
+    border: none; 
+    padding: 10px 20px; 
+    border-radius: 5px; 
+    margin: 0 10px; 
+    cursor: pointer; 
+    font-weight: bold;
+    min-height: 44px;
+    min-width: 44px;
+}
+
+.confirm-yes { 
+    background: #d32f2f; 
+    color: white; 
+}
+
+.confirm-no { 
+    background: #ccc; 
+}
 
 .action-btn {
     padding: 10px 20px;
@@ -276,6 +446,8 @@ table a:hover { color:var(--primary-red-dark); text-decoration:underline; }
     transition: background-color 0.3s;
     font-size: 14px;
     text-align: center;
+    min-height: 44px;
+    display: inline-block;
 }
 
 .approve-btn {
@@ -307,25 +479,108 @@ table a:hover { color:var(--primary-red-dark); text-decoration:underline; }
     background-color: #b71c1c;
 }
 
-@media (max-width: 900px) {
-    .navbar { flex-direction:column; align-items:flex-start; gap:15px; }
-    .navbar ul { flex-direction:column; width:100%; }
-    .navbar ul li a { width:100%; }
-    .container { margin: 40px auto; }
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .navbar-toggle {
+        display: block;
+    }
+    
+    .navbar.collapsed ul {
+        display: none;
+    }
+    
+    body {
+        padding-top: 70px;
+    }
+    
+    .container {
+        padding: 0 15px;
+    }
+    
+    .card { 
+        padding: 20px; 
+    }
+    
+    .status-summary { 
+        grid-template-columns: 1fr; 
+    }
+    
+    .notif-toast {
+        top: 80px;
+        font-size: 0.9rem;
+        padding: 12px 20px;
+    }
+    
+    h1 {
+        font-size: 1.5rem;
+    }
+    
+    table, thead, tbody, th, tr { 
+        display: block; 
+    }
+    
+    table thead { 
+        position: absolute; 
+        width: 1px; 
+        height: 1px; 
+        overflow: hidden; 
+        clip: rect(0 0 0 0); 
+    }
+    
+    table tr { 
+        background: white; 
+        margin-bottom: 15px; 
+        border-radius: var(--radius-md); 
+        box-shadow: var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.1)); 
+        padding: 10px 0; 
+    }
+    
+    table td { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: flex-start; 
+        padding: 10px 15px; 
+        border-bottom: 1px solid var(--light-gray); 
+    }
+    
+    table td:last-child { 
+        border-bottom: none; 
+    }
+    
+    table td::before { 
+        content: attr(data-label); 
+        font-weight: 700; 
+        padding-right: 10px; 
+        flex-basis: 45%; 
+        color: var(--dark-gray); 
+    }
+    
+    table td span { 
+        display: block; 
+    }
+    
+    .action-btn { 
+        width: 100%; 
+        margin: 6px 0; 
+    }
+    
+    .archive-btn, .decline-btn { 
+        margin-left: 0; 
+    }
 }
 
-@media (max-width: 768px) {
-    .card { padding:20px; }
-    .status-summary { grid-template-columns: 1fr; }
-    table, thead, tbody, th, tr { display:block; }
-    table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
-    table tr { background:white; margin-bottom:15px; border-radius: var(--radius-md); box-shadow: var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.1)); padding:10px 0; }
-    table td { display:flex; justify-content:space-between; align-items:flex-start; padding:10px 15px; border-bottom:1px solid var(--light-gray); }
-    table td:last-child { border-bottom:none; }
-    table td::before { content: attr(data-label); font-weight:700; padding-right:10px; flex-basis:45%; color:var(--dark-gray); }
-    table td span { display:block; }
-    .action-btn { width:100%; margin:6px 0; }
-    .archive-btn, .decline-btn { margin-left:0; }
+@media (max-width: 400px) {
+    .navbar .logo {
+        font-size: 1.4rem;
+    }
+    
+    .navbar {
+        padding: 12px 20px;
+    }
+    
+    .status-card .count {
+        font-size: 2rem;
+    }
 }
 </style>
 </head>
@@ -341,21 +596,30 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 </div>
 <?php unset($_SESSION['notif']); endif; ?>
 
-<!-- Navbar -->
-<nav class="navbar">
-<div class="logo">Papsi Paps Admin</div>
-<ul>
-<?php if($_SESSION['role']==='superadmin'): ?><li><a href="index.php">Dashboard</a></li><?php endif; ?>
-<li><a href="walk_in.php">Manage Walk-In</a></li>
-<li><a href="manage_payments.php">Payments</a></li>
-<?php if ($_SESSION['role'] === 'superadmin'): ?>
-<li><a href="manage_services.php">Manage Services</a></li>
-<?php endif; ?>
-<li><a href="manage_reservations.php" class="active">Reservations</a></li>
-<li><a href="archived_reservations.php">Archived Reservations</a></li>
-<?php if($_SESSION['role']==='superadmin'): ?><li><a href="audit_trail.php">Audit Trail</a></li><?php endif; ?>
-<li><a href="#" onclick="openLogoutModal()">Logout</a></li>
-</ul>
+<!-- Navbar with mobile toggle -->
+<nav class="navbar collapsed" id="adminNavbar">
+    <div class="logo">🔧 Papsi Paps Admin</div>
+    
+    <button class="navbar-toggle" onclick="toggleNav()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <ul id="navMenu">
+        <?php if($_SESSION['role']==='superadmin'): ?>
+            <li><a href="index.php">Dashboard</a></li>
+        <?php endif; ?>
+        <li><a href="walk_in.php">Manage Walk-In</a></li>
+        <li><a href="manage_payments.php">Payments</a></li>
+        <?php if ($_SESSION['role'] === 'superadmin'): ?>
+            <li><a href="manage_services.php">Manage Services</a></li>
+        <?php endif; ?>
+        <li><a href="manage_reservations.php" class="active">Reservations</a></li>
+        <li><a href="archived_reservations.php">Archived Reservations</a></li>
+        <?php if($_SESSION['role']==='superadmin'): ?>
+            <li><a href="audit_trail.php">Audit Trail</a></li>
+        <?php endif; ?>
+        <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
+    </ul>
 </nav>
 
 <div class="container">
@@ -363,6 +627,7 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 
 <div class="card">
 <table class="reservations-table">
+<thead>
 <tr>
 <th>Customer</th>
 <th>Service</th>
@@ -373,6 +638,8 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 <th>Status</th>
 <th>Action</th>
 </tr>
+</thead>
+<tbody>
 
 <?php while($row = $reservations_result->fetch_assoc()):
 $res_id = $row['id'];
@@ -403,6 +670,7 @@ while($s = $services_result->fetch_assoc()){ $services[] = $s; }
         border-radius: 20px;
         font-size: 0.85rem;
         font-weight: 700;
+        display: inline-block;
         <?php 
         switch($row['status']) {
             case 'pending_verification':
@@ -443,6 +711,7 @@ if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
 </td>
 </tr>
 <?php endwhile; ?>
+</tbody>
 </table>
 </div>
 </div>
@@ -459,7 +728,38 @@ if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
 <?php include "logout-modal.php"; ?>
 
 <script>
+// Mobile navbar toggle
+function toggleNav() {
+    const navbar = document.getElementById('adminNavbar');
+    const icon = document.querySelector('.navbar-toggle i');
+    
+    if (navbar.classList.contains('collapsed')) {
+        navbar.classList.remove('collapsed');
+        icon.classList.remove('fa-bars');
+        icon.classList.add('fa-times');
+    } else {
+        navbar.classList.add('collapsed');
+        icon.classList.remove('fa-times');
+        icon.classList.add('fa-bars');
+    }
+}
+
+// Auto-collapse on window resize
+window.addEventListener('resize', function() {
+    const navbar = document.getElementById('adminNavbar');
+    if (window.innerWidth > 768) {
+        navbar.classList.remove('collapsed');
+        const icon = document.querySelector('.navbar-toggle i');
+        if (icon) {
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-bars');
+        }
+    }
+});
+
+// Action modal functionality
 let pendingAction = { id: null, type: null };
+
 function openActionModal(id, action){
     pendingAction = { id, type: action };
     const modal = document.getElementById('confirmModal');
@@ -471,6 +771,7 @@ function openActionModal(id, action){
     modal.querySelector('#confirmYes').innerText = cta;
     modal.style.display = 'flex';
 }
+
 document.getElementById('confirmYes').onclick = function(){
     if(!pendingAction.id || !pendingAction.type) return;
     if(pendingAction.type === 'decline'){
@@ -479,8 +780,12 @@ document.getElementById('confirmYes').onclick = function(){
         window.location.href = "manage_reservations.php?archive=" + pendingAction.id;
     }
 };
-function closeModal(){ document.getElementById('confirmModal').style.display='none'; }
 
+function closeModal(){ 
+    document.getElementById('confirmModal').style.display='none'; 
+}
+
+// Notification toast
 document.addEventListener("DOMContentLoaded", function(){
     const toast = document.getElementById("notifToast");
     if(toast){
