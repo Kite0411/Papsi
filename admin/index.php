@@ -59,10 +59,10 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
     <title>Admin Dashboard - Auto Repair Shop</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- In <head> section of ALL admin PHP files -->
     <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Keep all your existing styles */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -77,8 +77,32 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
             padding: 15px 30px;
             align-items: center;
             border-bottom: 3px solid var(--primary-red);
+            position: relative; /* ADD THIS */
         }
         
+        /* ADD THIS - Mobile toggle button */
+        .navbar-toggle {
+            display: none;
+            background: var(--primary-red);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .navbar-toggle {
+                display: block;
+            }
+            
+            .navbar.collapsed ul {
+                display: none;
+            }
+        }
+        
+        /* Keep all your other existing styles */
         .navbar .logo {
             color: var(--primary-red);
             font-size: 1.8rem;
@@ -107,6 +131,8 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
             background: var(--gradient-primary);
             color: white;
         }
+        
+        /* [Keep all your other existing styles] */
         .container {
             padding: 40px 30px;
         }
@@ -169,6 +195,7 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
         .chatbot-card p {
             color: rgba(255,255,255,0.95);
         }
+        
         footer {
             text-align: center;
             padding: 20px;
@@ -178,10 +205,10 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
             border-top: 3px solid var(--primary-red);
         }
         
-        /* Activity Dashboard Styles */
         .activity-section {
             margin-top: 30px;
         }
+        
         .activity-item {
             padding: 12px 18px;
             border-left: 4px solid var(--primary-red);
@@ -228,121 +255,124 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
         }
 
         .logout-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-    animation: fadeInBg 0.3s ease;
-}
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            animation: fadeInBg 0.3s ease;
+        }
 
-.logout-modal {
-    background: white;
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-lg);
-    width: 90%;
-    max-width: 420px;
-    overflow: hidden;
-    transform: scale(0.9);
-    animation: fadeInModal 0.25s ease forwards;
-}
+        .logout-modal {
+            background: white;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            width: 90%;
+            max-width: 420px;
+            overflow: hidden;
+            transform: scale(0.9);
+            animation: fadeInModal 0.25s ease forwards;
+        }
 
-.logout-modal-header {
-    background: var(--gradient-primary);
-    color: white;
-    padding: 20px 25px;
-    text-align: center;
-}
+        .logout-modal-header {
+            background: var(--gradient-primary);
+            color: white;
+            padding: 20px 25px;
+            text-align: center;
+        }
 
-.logout-modal-header h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    color: white;
-}
+        .logout-modal-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: white;
+        }
 
-.logout-modal-body {
-    padding: 25px 30px;
-    text-align: center;
-}
+        .logout-modal-body {
+            padding: 25px 30px;
+            text-align: center;
+        }
 
-.logout-modal-body p {
-    color: var(--dark-gray);
-    font-size: 1.05rem;
-    margin: 0;
-}
+        .logout-modal-body p {
+            color: var(--dark-gray);
+            font-size: 1.05rem;
+            margin: 0;
+        }
 
-.logout-modal-footer {
-    padding: 15px 25px 25px;
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-}
+        .logout-modal-footer {
+            padding: 15px 25px 25px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
 
-.btn-cancel,
-.btn-logout {
-    border: none;
-    border-radius: var(--radius-md);
-    padding: 10px 30px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    font-size: 1rem;
-}
+        .btn-cancel,
+        .btn-logout {
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 10px 30px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-size: 1rem;
+        }
 
-.btn-cancel {
-    background: #e0e0e0;
-    color: #333;
-}
+        .btn-cancel {
+            background: #e0e0e0;
+            color: #333;
+        }
 
-.btn-cancel:hover {
-    background: #cacaca;
-}
+        .btn-cancel:hover {
+            background: #cacaca;
+        }
 
-.btn-logout {
-    background: var(--gradient-primary);
-    color: white;
-    box-shadow: var(--shadow-md);
-}
+        .btn-logout {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
 
-.btn-logout:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-}
+        .btn-logout:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
 
-@keyframes fadeInBg {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
+        @keyframes fadeInBg {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
 
-@keyframes fadeInModal {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-}
-
+        @keyframes fadeInModal {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body>
-<nav class="navbar">
-    <div class="logo"> Papsi Paps Admin</div>
-    <ul>
+
+<!-- UPDATED NAVBAR with mobile toggle -->
+<nav class="navbar collapsed" id="adminNavbar">
+    <div class="logo">Papsi Paps Admin</div>
+    
+    <!-- Mobile toggle button -->
+    <button class="navbar-toggle" onclick="toggleNav()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <ul id="navMenu">
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="index.php" class="active">Dashboard</a></li>
         <?php endif; ?>
-        <!-- Always visible -->
         <li><a href="walk_in.php">Manage Walk-In</a></li>
         <li><a href="manage_payments.php">Payments</a></li>
         <li><a href="manage_services.php">Manage Services</a></li>
         <li><a href="manage_reservations.php">Reservations</a></li>
-
-        <!-- Only visible to Super Admin -->
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
-
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
     </ul>
 </nav>
@@ -379,7 +409,9 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
             <p>Pending Payments</p>
         </div>
     </div>
+    
     <?php include '../chatbot/admin_chatbot.php'; ?>
+    
     <!-- System Activity Section -->
     <div class="activity-section">
         <h2 class="section-title">
@@ -390,7 +422,7 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
             <!-- Activity Chart -->
             <div class="card" style="grid-column: 1 / -1;">
                 <h3 style="margin-bottom: 20px; color: #2c3e50;">
-                    <i></i>Activity Over Time (Last 24 Hours)
+                    Activity Over Time (Last 24 Hours)
                 </h3>
                 <div class="chart-container">
                     <canvas id="activityChart"></canvas>
@@ -403,6 +435,7 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
 <footer>
     &copy; <?php echo date("Y"); ?> Auto Repair Shop | Admin Panel
 </footer>
+
 <!-- Logout Confirmation Modal -->
 <div id="logoutModal" class="logout-modal-overlay">
     <div class="logout-modal">
@@ -420,9 +453,38 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
 </div>
 
 <script>
+// Mobile navbar toggle
+function toggleNav() {
+    const navbar = document.getElementById('adminNavbar');
+    const icon = document.querySelector('.navbar-toggle i');
+    
+    if (navbar.classList.contains('collapsed')) {
+        navbar.classList.remove('collapsed');
+        icon.classList.remove('fa-bars');
+        icon.classList.add('fa-times');
+    } else {
+        navbar.classList.add('collapsed');
+        icon.classList.remove('fa-times');
+        icon.classList.add('fa-bars');
+    }
+}
+
+// Auto-collapse on window resize
+window.addEventListener('resize', function() {
+    const navbar = document.getElementById('adminNavbar');
+    if (window.innerWidth > 768) {
+        navbar.classList.remove('collapsed');
+        document.querySelector('.navbar-toggle i').classList.remove('fa-times');
+        document.querySelector('.navbar-toggle i').classList.add('fa-bars');
+    } else if (!navbar.classList.contains('collapsed')) {
+        navbar.classList.add('collapsed');
+    }
+});
+
+// Chart initialization
 document.addEventListener('DOMContentLoaded', function () {
     const ctx = document.getElementById('activityChart')?.getContext('2d');
-    if (!ctx) return; // prevent error if chart element doesn't exist
+    if (!ctx) return;
 
     const hourlyData = <?= json_encode($hourlyActivity ?? []) ?>;
 
@@ -433,7 +495,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return match ? parseInt(match.count) : 0;
     });
 
-    // Create line chart
+    // Create line chart with responsive options
     new Chart(ctx, {
         type: 'line',
         data: {
@@ -487,9 +549,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-// Auto-refresh every 60 seconds
-setTimeout(() => location.reload(), 60000);
-
+// Logout modal functions
 function openLogoutModal() {
     document.getElementById('logoutModal').style.display = 'flex';
 }
@@ -499,15 +559,16 @@ function closeLogoutModal() {
 }
 
 function confirmLogout() {
-    // Add a short fade before redirect for a polished feel
     const modal = document.getElementById('logoutModal');
     modal.style.opacity = '0';
     setTimeout(() => {
         window.location.href = '../auth/logout.php';
     }, 250);
 }
-</script>
 
+// Auto-refresh every 60 seconds
+setTimeout(() => location.reload(), 60000);
+</script>
 
 </body>
 </html>
