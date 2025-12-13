@@ -5,10 +5,7 @@ error_reporting(0);
 ini_set('display_errors', 0);
 ob_start(); // Start output buffering to catch any stray output
 
-// Start session safely
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+session_start();
 
 // Error handler to catch any errors
 set_error_handler(function($errno, $errstr, $errfile, $errline) {
@@ -23,7 +20,6 @@ require_once __DIR__ . '/../includes/config.php';
 if (!function_exists('getDBConnection')) {
     ob_clean();
     http_response_code(500);
-    header('Content-Type: application/json');
     echo json_encode(['ok' => false, 'error' => 'Configuration error']);
     ob_end_flush();
     exit;
@@ -35,7 +31,6 @@ $conn = getDBConnection();
 if (!$conn) {
     ob_clean();
     http_response_code(500);
-    header('Content-Type: application/json');
     echo json_encode(['ok' => false, 'error' => 'Database connection failed']);
     ob_end_flush();
     exit;
@@ -121,6 +116,9 @@ if ($action === 'verify_code') {
     $row = $result->fetch_assoc();
     $expected = (string)($row['code_val'] ?? '');
     if ($expected !== $code) {
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            logActivity('otp_mismatch', "email=$email expected=$expected got=$code");
+        }
         json_response(false, ['error' => 'Incorrect code'], 400);
     }
     $_SESSION['otp_verified'] = true;
