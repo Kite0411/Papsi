@@ -1,5 +1,5 @@
 <?php
-// Enhanced OTP reset API with proper error handling
+// Enhanced OTP reset API with proper error handling and PHPMailer integration
 error_reporting(0);
 ini_set('display_errors', 0);
 ob_start();
@@ -76,22 +76,35 @@ if ($action === 'request_code') {
         ], 400);
     }
     
-    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
+    // Use TRIM and LOWER for case-insensitive search
+    $stmt = $conn->prepare("SELECT id, email FROM users WHERE TRIM(LOWER(email)) = LOWER(?)");
     $stmt->bind_param('s', $email);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($result->num_rows === 0) {
+        // Log for debugging if DEBUG_MODE is on
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            logActivity('reset_email_not_found', "Email not found: $email");
+        }
         json_response(false, [
             'error' => 'No account found with this email address.',
             'code' => 'EMAIL_NOT_FOUND'
         ], 404);
     }
     
+    $user = $result->fetch_assoc();
+    $actualEmail = $user['email']; // Use the actual email from database
+    $stmt->close();
+    
+    // Generate 6-digit code
     $code = random_int(100000, 999999);
-    $stmt = $conn->prepare("UPDATE users SET code = ? WHERE email = ?");
+    
+    // Update the code in database using actual email
+    $stmt = $conn->prepare("UPDATE users SET code = ? WHERE TRIM(LOWER(email)) = LOWER(?)");
     $stmt->bind_param('is', $code, $email);
     $ok = $stmt->execute();
+    $stmt->close();
     
     if (!$ok) {
         json_response(false, [
@@ -100,164 +113,172 @@ if ($action === 'request_code') {
         ], 500);
     }
     
-    // Try to send email
-    try {
-        if (!function_exists('sendEmail')) {
-            json_response(false, [
-                'error' => 'Email service is currently unavailable.',
-                'code' => 'EMAIL_SERVICE_UNAVAILABLE'
-            ], 500);
-        }
-        
-        // Enhanced HTML email template
-        $htmlMessage = "
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset='UTF-8'>
-            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background-color: #f4f4f4;
-                }
-                .email-container {
-                    max-width: 600px;
-                    margin: 40px auto;
-                    background: #ffffff;
-                    border-radius: 12px;
-                    overflow: hidden;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                }
-                .header {
-                    background: linear-gradient(135deg, #e63946 0%, #d90429 100%);
-                    padding: 40px 30px;
-                    text-align: center;
-                }
-                .header h1 {
-                    color: #ffffff;
-                    margin: 0;
-                    font-size: 28px;
-                    font-weight: 700;
-                }
-                .content {
-                    padding: 40px 30px;
-                }
-                .content h2 {
-                    color: #333333;
-                    font-size: 22px;
-                    margin-top: 0;
-                    margin-bottom: 20px;
-                }
-                .content p {
-                    color: #666666;
-                    font-size: 16px;
-                    line-height: 1.6;
-                    margin-bottom: 20px;
-                }
-                .otp-box {
-                    background: #f8f9fa;
-                    border: 2px dashed #e63946;
-                    border-radius: 8px;
-                    padding: 30px;
-                    text-align: center;
-                    margin: 30px 0;
-                }
-                .otp-code {
-                    font-size: 36px;
-                    font-weight: 700;
-                    color: #e63946;
-                    letter-spacing: 8px;
-                    margin: 10px 0;
-                }
-                .otp-label {
-                    color: #666666;
-                    font-size: 14px;
-                    text-transform: uppercase;
-                    letter-spacing: 1px;
-                    margin-bottom: 5px;
-                }
-                .warning {
-                    background: #fff3cd;
-                    border-left: 4px solid #ffc107;
-                    padding: 15px;
-                    margin: 20px 0;
-                    border-radius: 4px;
-                }
-                .warning p {
-                    margin: 0;
-                    color: #856404;
-                    font-size: 14px;
-                }
-                .footer {
-                    background: #f8f9fa;
-                    padding: 30px;
-                    text-align: center;
-                    border-top: 1px solid #e9ecef;
-                }
-                .footer p {
-                    color: #6c757d;
-                    font-size: 14px;
-                    margin: 5px 0;
-                }
-                .brand {
-                    color: #e63946;
-                    font-weight: 700;
-                }
-            </style>
-        </head>
-        <body>
-            <div class='email-container'>
-                <div class='header'>
-                    <h1>🔐 Password Reset Request</h1>
-                </div>
-                <div class='content'>
-                    <h2>Hello!</h2>
-                    <p>We received a request to reset your password for your <span class='brand'>Papsi Paps</span> account.</p>
-                    <p>Use the verification code below to complete your password reset:</p>
-                    
-                    <div class='otp-box'>
-                        <div class='otp-label'>Your Verification Code</div>
-                        <div class='otp-code'>$code</div>
-                    </div>
-                    
-                    <div class='warning'>
-                        <p>⚠️ <strong>Important:</strong> This code will expire in 10 minutes. Never share this code with anyone.</p>
-                    </div>
-                    
-                    <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
-                </div>
-                <div class='footer'>
-                    <p><strong class='brand'>Papsi Paps Auto Repair Shop</strong></p>
-                    <p>This is an automated message, please do not reply to this email.</p>
-                    <p style='margin-top: 15px; color: #adb5bd; font-size: 12px;'>
-                        © 2025 Papsi Paps. All rights reserved.
-                    </p>
-                </div>
+    // Enhanced HTML email template
+    $htmlMessage = "
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f4f4f4;
+            }
+            .email-container {
+                max-width: 600px;
+                margin: 40px auto;
+                background: #ffffff;
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            .header {
+                background: linear-gradient(135deg, #e63946 0%, #d90429 100%);
+                padding: 40px 30px;
+                text-align: center;
+            }
+            .header h1 {
+                color: #ffffff;
+                margin: 0;
+                font-size: 28px;
+                font-weight: 700;
+            }
+            .content {
+                padding: 40px 30px;
+            }
+            .content h2 {
+                color: #333333;
+                font-size: 22px;
+                margin-top: 0;
+                margin-bottom: 20px;
+            }
+            .content p {
+                color: #666666;
+                font-size: 16px;
+                line-height: 1.6;
+                margin-bottom: 20px;
+            }
+            .otp-box {
+                background: #f8f9fa;
+                border: 2px dashed #e63946;
+                border-radius: 8px;
+                padding: 30px;
+                text-align: center;
+                margin: 30px 0;
+            }
+            .otp-code {
+                font-size: 36px;
+                font-weight: 700;
+                color: #e63946;
+                letter-spacing: 8px;
+                margin: 10px 0;
+            }
+            .otp-label {
+                color: #666666;
+                font-size: 14px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                margin-bottom: 5px;
+            }
+            .warning {
+                background: #fff3cd;
+                border-left: 4px solid #ffc107;
+                padding: 15px;
+                margin: 20px 0;
+                border-radius: 4px;
+            }
+            .warning p {
+                margin: 0;
+                color: #856404;
+                font-size: 14px;
+            }
+            .footer {
+                background: #f8f9fa;
+                padding: 30px;
+                text-align: center;
+                border-top: 1px solid #e9ecef;
+            }
+            .footer p {
+                color: #6c757d;
+                font-size: 14px;
+                margin: 5px 0;
+            }
+            .brand {
+                color: #e63946;
+                font-weight: 700;
+            }
+        </style>
+    </head>
+    <body>
+        <div class='email-container'>
+            <div class='header'>
+                <h1>🔐 Password Reset Request</h1>
             </div>
-        </body>
-        </html>
-        ";
-        
-        $plainMessage = "Your password reset code is: $code\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this, please ignore this email.\n\n- Papsi Paps Auto Repair Shop";
-        
+            <div class='content'>
+                <h2>Hello!</h2>
+                <p>We received a request to reset your password for your <span class='brand'>Papsi Paps</span> account.</p>
+                <p>Use the verification code below to complete your password reset:</p>
+                
+                <div class='otp-box'>
+                    <div class='otp-label'>Your Verification Code</div>
+                    <div class='otp-code'>$code</div>
+                </div>
+                
+                <div class='warning'>
+                    <p>⚠️ <strong>Important:</strong> This code will expire in 10 minutes. Never share this code with anyone.</p>
+                </div>
+                
+                <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
+            </div>
+            <div class='footer'>
+                <p><strong class='brand'>Papsi Paps Auto Repair Shop</strong></p>
+                <p>This is an automated message, please do not reply to this email.</p>
+                <p style='margin-top: 15px; color: #adb5bd; font-size: 12px;'>
+                    © 2025 Papsi Paps. All rights reserved.
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    ";
+    
+    $plainMessage = "Password Reset Code\n\nYour verification code is: $code\n\nThis code will expire in 10 minutes.\n\nIf you didn't request this, please ignore this email.\n\n- Papsi Paps Auto Repair Shop";
+    
+    // Send email using your sendEmail function
+    try {
         list($sent, $err) = sendEmail(
-            $email,
+            $actualEmail,
             'Password Reset Code - Papsi Paps',
             $htmlMessage,
             $plainMessage
         );
         
         if (!$sent) {
+            // Log the error for debugging
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                logActivity('email_send_failed', "Failed to send to $actualEmail: $err");
+            }
+            
             json_response(false, [
                 'error' => 'Failed to send verification email. Please try again.',
                 'code' => 'EMAIL_SEND_ERROR',
                 'details' => $err
             ], 500);
         }
+        
+        // Log successful email send
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            logActivity('reset_code_sent', "Code sent to: $actualEmail");
+        }
+        
     } catch (Exception $e) {
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            logActivity('email_exception', "Exception: " . $e->getMessage());
+        }
+        
         json_response(false, [
             'error' => 'Email service error. Please try again later.',
             'code' => 'EMAIL_EXCEPTION',
@@ -304,7 +325,8 @@ if ($action === 'verify_code') {
         }
     }
     
-    $stmt = $conn->prepare("SELECT id, TRIM(code) AS code_val FROM users WHERE email = ?");
+    // Use TRIM in SQL and case-insensitive email search
+    $stmt = $conn->prepare("SELECT id, TRIM(code) AS code_val FROM users WHERE TRIM(LOWER(email)) = LOWER(?)");
     $stmt->bind_param('s', $email);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -318,6 +340,7 @@ if ($action === 'verify_code') {
     
     $row = $result->fetch_assoc();
     $expected = (string)($row['code_val'] ?? '');
+    $stmt->close();
     
     if ($expected !== $code) {
         if (defined('DEBUG_MODE') && DEBUG_MODE) {
@@ -364,9 +387,10 @@ if ($action === 'reset_password') {
     }
     
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $conn->prepare("UPDATE users SET password = ?, code = NULL WHERE email = ?");
+    $stmt = $conn->prepare("UPDATE users SET password = ?, code = NULL WHERE TRIM(LOWER(email)) = LOWER(?)");
     $stmt->bind_param('ss', $passwordHash, $email);
     $ok = $stmt->execute();
+    $stmt->close();
     
     if (!$ok) {
         json_response(false, [
@@ -391,6 +415,7 @@ if ($action === 'reset_password') {
                 .success-icon { font-size: 64px; text-align: center; margin: 20px 0; }
                 .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e9ecef; }
                 .brand { color: #e63946; font-weight: 700; }
+                p { color: #666; line-height: 1.6; }
             </style>
         </head>
         <body>
@@ -405,6 +430,7 @@ if ($action === 'reset_password') {
                 </div>
                 <div class='footer'>
                     <p><strong class='brand'>Papsi Paps Auto Repair Shop</strong></p>
+                    <p style='color: #6c757d; font-size: 14px;'>© 2025 Papsi Paps. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -415,6 +441,11 @@ if ($action === 'reset_password') {
     } catch (Exception $e) {
         // Don't fail the request if confirmation email fails
         error_log("Failed to send confirmation email: " . $e->getMessage());
+    }
+    
+    // Log the password reset
+    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+        logActivity('password_reset', "Password reset for: $email");
     }
     
     unset($_SESSION['otp_verified']);
