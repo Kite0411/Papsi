@@ -79,16 +79,16 @@ if (isset($_POST['verify_payment'])) {
             'message' => "Payment " . ($action === 'verified' ? 'verified' : 'rejected') . " successfully!",
             'type' => $action === 'verified' ? 'success' : 'error'
         ];
-        } else {
-            $_SESSION['notif'] = [
-                'message' => "Error updating payment status.",
-                'type' => 'error'
-            ];
-        }
+    } else {
+        $_SESSION['notif'] = [
+            'message' => "Error updating payment status.",
+            'type' => 'error'
+        ];
+    }
 
-        // Redirect to avoid form resubmission and show toast
-        header("Location: manage_payments.php");
-        exit();
+    // Redirect to avoid form resubmission and show toast
+    header("Location: manage_payments.php");
+    exit();
 }
 
 // --- Fetch all payments with reservation details ---
@@ -115,12 +115,7 @@ if (in_array($status, $validStatuses)) {
 }
 
 $payments = mysqli_query($conn, $query);
-
-
-$payments = mysqli_query($conn, $query);
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -130,11 +125,16 @@ $payments = mysqli_query($conn, $query);
     <title>Manage Payments - Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body {
             background: var(--light-gray);
+            padding-top: 80px;
+            padding-bottom: 30px;
+            margin: 0;
         }
+        
         .navbar {
             background: white;
             box-shadow: var(--shadow-md);
@@ -143,12 +143,29 @@ $payments = mysqli_query($conn, $query);
             padding: 15px 30px;
             align-items: center;
             border-bottom: 3px solid var(--primary-red);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
         }
         
         .navbar .logo {
             color: var(--primary-red);
             font-size: 1.8rem;
             font-weight: 800;
+        }
+        
+        /* Mobile toggle button */
+        .navbar-toggle {
+            display: none;
+            background: var(--primary-red);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
         }
         
         .navbar ul {
@@ -169,10 +186,12 @@ $payments = mysqli_query($conn, $query);
             transition: var(--transition-fast);
         }
         
-        .navbar ul li a.active, .navbar ul li a:hover {
+        .navbar ul li a.active, 
+        .navbar ul li a:hover {
             background: var(--gradient-primary);
             color: white;
         }
+        
         .payment-card {
             background: white;
             border-radius: var(--radius-lg);
@@ -182,33 +201,43 @@ $payments = mysqli_query($conn, $query);
             border: 2px solid rgba(220, 20, 60, 0.1);
             transition: var(--transition-normal);
         }
+        
         .payment-card:hover {
             box-shadow: var(--shadow-lg);
             border-color: var(--primary-red);
         }
+        
         .status-badge {
             padding: 6px 18px;
             border-radius: 20px;
             font-size: 0.85rem;
             font-weight: 700;
+            display: inline-block;
         }
+        
         .status-pending {
             background: #FFF3E0;
             color: #E65100;
         }
+        
         .status-verified {
             background: #E8F5E9;
             color: #2E7D32;
         }
+        
         .status-rejected {
             background: #FFEBEE;
             color: var(--primary-red);
         }
+        
         .payment-proof {
+            max-width: 100%;
+            width: 100%;
             max-width: 300px;
             border-radius: 8px;
             cursor: pointer;
         }
+        
         .modal-img {
             max-width: 100%;
             border-radius: 8px;
@@ -216,7 +245,7 @@ $payments = mysqli_query($conn, $query);
 
         .notif-toast {
             position: fixed;
-            top: 25px;
+            top: 90px;
             left: 50%;
             transform: translateX(-50%) translateY(-20px);
             color: white;
@@ -229,30 +258,26 @@ $payments = mysqli_query($conn, $query);
             opacity: 0;
             transition: opacity 0.4s ease, transform 0.4s ease;
             z-index: 9999;
+            max-width: 90%;
         }
+        
         .notif-toast.show {
             opacity: 1;
             transform: translateX(-50%) translateY(0);
         }
+        
         .filter-bar {
             border-left: 5px solid #0d6efd;
             border-radius: 10px;
             background: #f8f9fa;
-        }
-
-        .filter-bar {
-            border-left: 5px solid #0d6efd;
-            border-radius: 10px;
-            background: #f8f9fa;
-            transition: none !important; /* disable animation */
+            transition: none !important;
         }
 
         .filter-bar:hover {
-            background: #f8f9fa !important; /* keep same background on hover */
-            box-shadow: none !important;    /* no shadow change */
-            transform: none !important;     /* no lift or scale */
+            background: #f8f9fa !important;
+            box-shadow: none !important;
+            transform: none !important;
         }
-
 
         .filter-btn {
             min-width: 140px;
@@ -260,6 +285,10 @@ $payments = mysqli_query($conn, $query);
             transition: all 0.25s ease;
             border-radius: 50px;
             text-decoration: none !important;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .filter-btn:hover {
@@ -283,40 +312,119 @@ $payments = mysqli_query($conn, $query);
             padding: 3px 8px;
             border-radius: 10px;
         }
+        
+        .btn {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .navbar-toggle {
+                display: block;
+            }
+            
+            .navbar.collapsed ul {
+                display: none;
+            }
+            
+            body {
+                padding-top: 70px;
+            }
+            
+            .container {
+                padding-left: 15px;
+                padding-right: 15px;
+            }
+            
+            .payment-card {
+                padding: 20px 15px;
+            }
+            
+            .payment-card .row {
+                flex-direction: column;
+            }
+            
+            .payment-card .col-md-8,
+            .payment-card .col-md-4 {
+                max-width: 100%;
+                margin-bottom: 15px;
+            }
+            
+            .payment-proof {
+                max-width: 100%;
+                margin-bottom: 15px;
+            }
+            
+            .filter-btn {
+                min-width: 100px;
+                font-size: 0.9rem;
+                padding: 8px 12px;
+            }
+            
+            .notif-toast {
+                top: 80px;
+                font-size: 0.9rem;
+                padding: 12px 20px;
+            }
+            
+            h2 {
+                font-size: 1.5rem;
+            }
+            
+            .payment-card h5 {
+                font-size: 1.1rem;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .navbar .logo {
+                font-size: 1.4rem;
+            }
+            
+            .navbar {
+                padding: 12px 20px;
+            }
+            
+            .filter-btn {
+                min-width: 90px;
+                font-size: 0.85rem;
+            }
+        }
     </style>
 </head>
 <body>
 <?php if (isset($_SESSION['notif'])): 
     $type = $_SESSION['notif']['type'];
     $message = $_SESSION['notif']['message'];
-    $color = $type === 'success' ? '#28a745' : '#dc3545'; // green or red
+    $color = $type === 'success' ? '#28a745' : '#dc3545';
 ?>
 <div class="notif-toast" id="notifToast" style="background: <?php echo $color; ?>">
     <?php echo htmlspecialchars($message); ?>
 </div>
 <?php unset($_SESSION['notif']); endif; ?>
-<!-- Navbar -->
-<nav class="navbar">
-    <div class="logo"> Papsi Paps Admin</div>
-    <ul>
+
+<!-- Navbar with mobile toggle -->
+<nav class="navbar collapsed" id="adminNavbar">
+    <div class="logo">🔧 Papsi Paps Admin</div>
+    
+    <button class="navbar-toggle" onclick="toggleNav()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <ul id="navMenu">
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="index.php">Dashboard</a></li>
         <?php endif; ?>
-        <!-- Always visible -->
         <li><a href="walk_in.php">Manage Walk-In</a></li>
         <li><a href="manage_payments.php" class="active">Payments</a></li>
-                          <?php if ($_SESSION['role'] === 'superadmin'): ?>
-
-        <li><a href="manage_services.php">Manage Services</a></li>
-                <?php endif; ?>
-
+        <?php if ($_SESSION['role'] === 'superadmin'): ?>
+            <li><a href="manage_services.php">Manage Services</a></li>
+        <?php endif; ?>
         <li><a href="manage_reservations.php">Reservations</a></li>
-
-        <!-- Only visible to Super Admin -->
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
-
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
     </ul>
 </nav>
@@ -325,34 +433,34 @@ $payments = mysqli_query($conn, $query);
     <h2 class="mb-4">
         <i class="fas fa-money-bill-wave me-2"></i>Payment Management
     </h2>
-<!-- Payment Filter Bar -->
-<div class="filter-bar card shadow-sm p-3 mb-4 text-center">
-    <h5 class="mb-3 text-secondary fw-bold">
-        <i class="fas fa-filter me-2"></i>Filter Payments by Status
-    </h5>
-    <div class="d-flex justify-content-center flex-wrap gap-2">
-        <a href="?status=all" 
-           class="filter-btn btn <?= (!isset($_GET['status']) || $_GET['status'] === 'all') ? 'btn-primary active' : 'btn-outline-primary' ?>">
-            <i class="fas fa-list me-1"></i> All
-        </a>
+    
+    <!-- Payment Filter Bar -->
+    <div class="filter-bar card shadow-sm p-3 mb-4 text-center">
+        <h5 class="mb-3 text-secondary fw-bold">
+            <i class="fas fa-filter me-2"></i>Filter Payments by Status
+        </h5>
+        <div class="d-flex justify-content-center flex-wrap gap-2">
+            <a href="?status=all" 
+               class="filter-btn btn <?= (!isset($_GET['status']) || $_GET['status'] === 'all') ? 'btn-primary active' : 'btn-outline-primary' ?>">
+                <i class="fas fa-list me-1"></i> All
+            </a>
 
-        <a href="?status=pending" 
-           class="filter-btn btn <?= ($_GET['status'] ?? '') === 'pending' ? 'btn-warning active' : 'btn-outline-warning' ?>">
-            <i class="fas fa-hourglass-half me-1"></i> Pending
-        </a>
+            <a href="?status=pending" 
+               class="filter-btn btn <?= ($_GET['status'] ?? '') === 'pending' ? 'btn-warning active' : 'btn-outline-warning' ?>">
+                <i class="fas fa-hourglass-half me-1"></i> Pending
+            </a>
 
-        <a href="?status=verified" 
-           class="filter-btn btn <?= ($_GET['status'] ?? '') === 'verified' ? 'btn-success active' : 'btn-outline-success' ?>">
-            <i class="fas fa-check-circle me-1"></i> Verified
-        </a>
+            <a href="?status=verified" 
+               class="filter-btn btn <?= ($_GET['status'] ?? '') === 'verified' ? 'btn-success active' : 'btn-outline-success' ?>">
+                <i class="fas fa-check-circle me-1"></i> Verified
+            </a>
 
-        <a href="?status=rejected" 
-           class="filter-btn btn <?= ($_GET['status'] ?? '') === 'rejected' ? 'btn-danger active' : 'btn-outline-danger' ?>">
-            <i class="fas fa-times-circle me-1"></i> Rejected
-        </a>
+            <a href="?status=rejected" 
+               class="filter-btn btn <?= ($_GET['status'] ?? '') === 'rejected' ? 'btn-danger active' : 'btn-outline-danger' ?>">
+                <i class="fas fa-times-circle me-1"></i> Rejected
+            </a>
+        </div>
     </div>
-</div>
-
 
     <?php if (mysqli_num_rows($payments) > 0): ?>
         <?php while ($payment = mysqli_fetch_assoc($payments)): ?>
@@ -377,7 +485,6 @@ $payments = mysqli_query($conn, $query);
                         
                         <?php if ($payment['payment_status'] !== 'pending'): ?>
                             <p class="mb-0">
-                                <!-- <strong>Verified By:</strong> <?php echo htmlspecialchars($payment['verified_by_name'] ?? 'N/A'); ?><br> -->
                                 <strong>Verified At:</strong> <?php echo $payment['verified_at'] ? date('F d, Y h:i A', strtotime($payment['verified_at'])) : 'N/A'; ?>
                                 <?php if ($payment['notes']): ?>
                                     <br><strong>Notes:</strong> <?php echo htmlspecialchars($payment['notes']); ?>
@@ -441,7 +548,7 @@ $payments = mysqli_query($conn, $query);
                                 <p>Are you sure you want to verify this payment?</p>
                                 <div class="mb-3">
                                     <label class="form-label">Notes (Optional)</label>
-                                    <textarea name="notes" class="form-control" rows="3"></textarea>
+                                    <textarea name="notes" class="form-control" rows="3" style="font-size: 16px;"></textarea>
                                 </div>
                             </div>
                             <div class="modal-footer">
@@ -468,7 +575,7 @@ $payments = mysqli_query($conn, $query);
                                 <p>Are you sure you want to reject this payment?</p>
                                 <div class="mb-3">
                                     <label class="form-label">Reason (Required)</label>
-                                    <textarea name="notes" class="form-control" rows="3" required></textarea>
+                                    <textarea name="notes" class="form-control" rows="3" required style="font-size: 16px;"></textarea>
                                 </div>
                             </div>
                             <div class="modal-footer">
@@ -488,16 +595,47 @@ $payments = mysqli_query($conn, $query);
 </div>
 
 <?php include "logout-modal.php" ?>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+// Mobile navbar toggle
+function toggleNav() {
+    const navbar = document.getElementById('adminNavbar');
+    const icon = document.querySelector('.navbar-toggle i');
+    
+    if (navbar.classList.contains('collapsed')) {
+        navbar.classList.remove('collapsed');
+        icon.classList.remove('fa-bars');
+        icon.classList.add('fa-times');
+    } else {
+        navbar.classList.add('collapsed');
+        icon.classList.remove('fa-times');
+        icon.classList.add('fa-bars');
+    }
+}
+
+// Auto-collapse on window resize
+window.addEventListener('resize', function() {
+    const navbar = document.getElementById('adminNavbar');
+    if (window.innerWidth > 768) {
+        navbar.classList.remove('collapsed');
+        const icon = document.querySelector('.navbar-toggle i');
+        if (icon) {
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-bars');
+        }
+    }
+});
+
+// Notification toast
+document.addEventListener("DOMContentLoaded", function() {
     const toast = document.getElementById("notifToast");
     if (toast) {
-        setTimeout(() => toast.classList.add("show"), 100); // fade in
+        setTimeout(() => toast.classList.add("show"), 100);
         setTimeout(() => {
-            toast.classList.remove("show"); // fade out
-            setTimeout(() => toast.remove(), 400); // remove after fade
-        }, 3000); // visible for 3s
+            toast.classList.remove("show");
+            setTimeout(() => toast.remove(), 400);
+        }, 3000);
     }
 });
 </script>
