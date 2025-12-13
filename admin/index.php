@@ -59,6 +59,8 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
     <title>Admin Dashboard - Auto Repair Shop</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- In <head> section of ALL admin PHP files -->
+    <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
