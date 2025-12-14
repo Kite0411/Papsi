@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = "Please enter a valid email address.";
         $messageType = 'danger';
     } else {
-        // ✅ Store reservation details temporarily in session
+        // Store reservation details temporarily in session
         $_SESSION['reservation_data'] = [
             'name' => $name,
             'email' => $email,
@@ -60,10 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'reservation_time' => $reservation_time
         ];
 
-        // ✅ Store selected service IDs
+        // Store selected service IDs
         $_SESSION['selected_services'] = $selected_services;
 
-        // ✅ Compute total amount for display (optional)
+        // Compute total amount for display
         $total_amount = 0;
         if (!empty($selected_services)) {
             $placeholders = implode(',', array_fill(0, count($selected_services), '?'));
@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $_SESSION['total_amount'] = $total_amount;
 
-        // ✅ Redirect to payment page
+        // Redirect to payment page
         header("Location: payment.php");
         exit();
     }
@@ -89,8 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch all services for display
 $services = mysqli_query($conn, "SELECT * FROM services");
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -105,29 +103,28 @@ $services = mysqli_query($conn, "SELECT * FROM services");
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
         body {
-        background: url('../bg/rbg.jpg') no-repeat center center fixed;
-        background-size: cover;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        padding: 30px 0;
-        color: #222;
-        min-height: 100vh;
+            background: url('../bg/rbg.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 30px 0;
+            color: #222;
+            min-height: 100vh;
+            margin: 0;
         }
 
-        /* Optional overlay for better text contrast */
+        /* Overlay for better text contrast */
         body::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.55); /* semi-transparent dark */
-        backdrop-filter: blur(5px); /* <-- adds the blur */
-        -webkit-backdrop-filter: blur(5px); /* for Safari support */
-        z-index: -1;
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            z-index: -1;
         }
-
-
         
         .reservation-form {
             background: white;
@@ -181,6 +178,7 @@ $services = mysqli_query($conn, "SELECT * FROM services");
             border: 2px solid #e0e0e0;
             transition: var(--transition-fast);
             padding: 12px 15px;
+            font-size: 16px; /* Prevents iOS zoom */
         }
         
         .form-control:focus {
@@ -211,6 +209,8 @@ $services = mysqli_query($conn, "SELECT * FROM services");
             transition: var(--transition-normal);
             font-size: 1.1rem;
             letter-spacing: 0.5px;
+            min-height: 44px;
+            width: 100%;
         }
         
         .btn-primary:hover {
@@ -250,16 +250,90 @@ $services = mysqli_query($conn, "SELECT * FROM services");
             border: none;
             padding: 15px 20px;
         }
-.btn {
-  border-radius: 8px;
-  padding: 10px 20px;
-  transition: all 0.2s ease-in-out;
-}
 
-.btn:hover {
-  transform: scale(1.03);
-}
+        .btn {
+            border-radius: 8px;
+            padding: 10px 20px;
+            transition: all 0.2s ease-in-out;
+            min-height: 44px;
+        }
 
+        .btn:hover {
+            transform: scale(1.03);
+        }
+
+        .btn-outline-danger {
+            min-height: 40px;
+            min-width: 40px;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            body {
+                padding: 15px 0;
+            }
+            
+            .container {
+                padding: 0 10px;
+            }
+            
+            .form-header {
+                padding: 30px 20px;
+            }
+            
+            .form-header h2 {
+                font-size: 1.5rem;
+                margin-top: 10px;
+            }
+            
+            .form-header p {
+                font-size: 0.95rem;
+            }
+            
+            .form-header::after {
+                display: none;
+            }
+            
+            .form-body {
+                padding: 30px 20px 25px;
+            }
+            
+            h5 {
+                font-size: 1.1rem;
+            }
+            
+            .btn-primary {
+                padding: 12px 30px;
+                font-size: 1rem;
+            }
+            
+            .service-card {
+                padding: 12px;
+            }
+            
+            .service-card strong {
+                font-size: 1rem;
+            }
+            
+            .btn-outline-danger {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .form-header h2 {
+                font-size: 1.3rem;
+            }
+            
+            .form-header p {
+                font-size: 0.85rem;
+            }
+            
+            h5 {
+                font-size: 1rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -271,7 +345,8 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                     
                     <div class="form-header text-center position-relative">
                         <a href="../index.php" 
-                        class="btn btn-outline-danger btn-sm position-absolute top-0 start-0 m-3" style="color: white;">
+                           class="btn btn-outline-danger btn-sm position-absolute top-0 start-0 m-3" 
+                           style="color: white; border-color: white;">
                             <i class="fa-solid fa-arrow-left"></i>
                         </a>
 
@@ -288,38 +363,38 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                             </div>
                         <?php endif; ?>
 
-                        <form method="post">
+                        <form method="post" id="reservationForm">
                             <div class="row">
-                            <div class="col-md-6">
-                                <h5 class="mb-3">Personal Information</h5>
+                                <div class="col-md-6">
+                                    <h5 class="mb-3">Personal Information</h5>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Full Name</label>
-                                    <input type="text" name="name" class="form-control" 
-                                        value="<?php 
-                                            echo htmlspecialchars($customer['name'] ?? ($_POST['name'] ?? '')); 
-                                        ?>" 
-                                        required>
-                                </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Full Name</label>
+                                        <input type="text" name="name" class="form-control" 
+                                            value="<?php 
+                                                echo htmlspecialchars($customer['name'] ?? ($_POST['name'] ?? '')); 
+                                            ?>" 
+                                            required>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Phone Number</label>
-                                    <input type="tel" name="phone" class="form-control" 
-                                        value="<?php 
-                                            echo htmlspecialchars($customer['phone'] ?? ($_POST['phone'] ?? '')); 
-                                        ?>" 
-                                        required>
-                                </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Phone Number</label>
+                                        <input type="tel" name="phone" class="form-control" 
+                                            value="<?php 
+                                                echo htmlspecialchars($customer['phone'] ?? ($_POST['phone'] ?? '')); 
+                                            ?>" 
+                                            required>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" name="email" class="form-control" 
-                                        value="<?php 
-                                            echo htmlspecialchars($customer['email'] ?? ($_POST['email'] ?? '')); 
-                                        ?>" 
-                                        required>
+                                    <div class="mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" name="email" class="form-control" 
+                                            value="<?php 
+                                                echo htmlspecialchars($customer['email'] ?? ($_POST['email'] ?? '')); 
+                                            ?>" 
+                                            required>
+                                    </div>
                                 </div>
-                            </div>
 
                                 
                                 <div class="col-md-6">
@@ -351,7 +426,7 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                                             class="form-control" 
                                             placeholder="Select date"
                                             value="<?php echo $_POST['reservation_date'] ?? ''; ?>" 
-                                            required >
+                                            required>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">Preferred Time</label>
@@ -359,8 +434,7 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                                             name="reservation_time" 
                                             id="reservation_time"
                                             class="form-control" 
-                                            required
-                                        >
+                                            required>
                                             <option value="">Select time</option>
                                         </select>
                                     </div>
@@ -385,10 +459,11 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                                     <?php } ?>
                                 </div>
                             </div>
+                            
                             <div class="text-center mt-4">
                                 <button type="button" class="btn btn-primary btn-lg"
-                                onclick="confirmAction('Do you want to book this appointment?', 'form', this.form)">
-                                Book Appointment
+                                        onclick="confirmAction('Do you want to book this appointment?', 'form', document.getElementById('reservationForm'))">
+                                    Book Appointment
                                 </button>
                             </div>
                         </form>
@@ -397,23 +472,26 @@ $services = mysqli_query($conn, "SELECT * FROM services");
             </div>
         </div>
     </div>
+    
     <!-- Universal Confirmation Modal -->
     <div class="modal fade" id="confirmActionModal" tabindex="-1" aria-labelledby="confirmActionLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-3 shadow">
-        <div class="modal-header bg-danger text-white">
-            <h5 class="modal-title" id="confirmActionLabel" style="color: #FFF;">Confirm Action</h5>
-        </div>
-        <div class="modal-body text-center">
-            <p id="confirmMessage" class="fs-6 mb-3">Are you sure you want to proceed?</p>
-            <div class="d-flex justify-content-center gap-2">
-            <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" id="confirmFormSubmit" class="btn btn-danger px-4">Confirm</button>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 rounded-3 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="confirmActionLabel" style="color: #FFF;">Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <p id="confirmMessage" class="fs-6 mb-3">Are you sure you want to proceed?</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" id="confirmFormSubmit" class="btn btn-danger px-4">Confirm</button>
+                    </div>
+                </div>
             </div>
         </div>
-        </div>
     </div>
-    </div>
+    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function toggleService(serviceId) {
@@ -439,6 +517,7 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                 }
             });
         });
+        
         flatpickr("#reservation_date", {
             dateFormat: "Y-m-d",
             minDate: "today",
@@ -493,23 +572,21 @@ $services = mysqli_query($conn, "SELECT * FROM services");
         });
 
         function confirmAction(message, actionType = 'link', target = null) {
-  const modal = new bootstrap.Modal(document.getElementById('confirmActionModal'));
-  document.getElementById('confirmMessage').textContent = message;
+            const modal = new bootstrap.Modal(document.getElementById('confirmActionModal'));
+            document.getElementById('confirmMessage').textContent = message;
 
-  const confirmBtn = document.getElementById('confirmFormSubmit');
-  confirmBtn.onclick = function() {
-    if (actionType === 'form' && target) {
-      target.submit();
-      
-    } else if (actionType === 'link' && target) {
-      window.location.href = target;
-    }
-    modal.hide();
-  };
+            const confirmBtn = document.getElementById('confirmFormSubmit');
+            confirmBtn.onclick = function() {
+                if (actionType === 'form' && target) {
+                    target.submit();
+                } else if (actionType === 'link' && target) {
+                    window.location.href = target;
+                }
+                modal.hide();
+            };
 
-  modal.show();
-}
-
+            modal.show();
+        }
     </script>
 </body>
 </html>
