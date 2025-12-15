@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// --- RESTORE Reservation ---
+// --- RESTORE Reservation (back to pending) ---
 if (isset($_GET['restore'])) {
     $id = intval($_GET['restore']);
 
@@ -20,18 +20,18 @@ if (isset($_GET['restore'])) {
     $reservation = $stmt->get_result()->fetch_assoc();
 
     if ($reservation) {
-        // Restore to approved status
-        $update = $conn->prepare("UPDATE reservations SET archived = 0, status = 'approved' WHERE id = ?");
+        // Restore to pending status and make active again
+        $update = $conn->prepare("UPDATE reservations SET archived = 0, status = 'pending' WHERE id = ?");
         $update->bind_param("i", $id);
         $update->execute();
 
         // Log audit trail
-        $desc = "Reservation #{$reservation['id']} restored from completed by admin '{$_SESSION['username']}'.";
+        $desc = "Reservation #{$reservation['id']} restored from completed to pending by admin '{$_SESSION['username']}'.";
         logAudit('RESERVATION_RESTORED', $desc, $_SESSION['user_id'], $_SESSION['username']);
     }
 
     $_SESSION['notif'] = [
-        'message' => 'Reservation restored to active list!',
+        'message' => 'Reservation restored to pending status!',
         'type' => 'success'
     ];
     header("Location: completed_reservations.php");
@@ -296,12 +296,12 @@ table a:hover {
 }
 
 .info-badge {
-    background: #E3F2FD;
-    color: #1976D2;
+    background: #E8F5E9;
+    color: #2E7D32;
     padding: 20px;
     border-radius: 8px;
     margin-bottom: 20px;
-    border-left: 4px solid #1976D2;
+    border-left: 4px solid #2E7D32;
 }
 
 /* Mobile responsiveness */
@@ -435,7 +435,7 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 <h1>📋 Completed Reservations</h1>
 
 <div class="info-badge">
-    <strong><i class="fas fa-info-circle"></i> Info:</strong> These are reservations that have been marked as completed. You can restore them back to active status or permanently delete them.
+    <strong><i class="fas fa-info-circle"></i> Info:</strong> These reservations have been approved and completed. You can restore them back to pending status or permanently delete them.
 </div>
 
 <table>
@@ -487,8 +487,8 @@ if ($completed_result->num_rows === 0) {
 <td data-label="Date"><?php echo date("M j, Y", strtotime($row['reservation_date'])); ?></td>
 <td data-label="Time"><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
 <td data-label="Status">
-    <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; background: #F3E5F5; color: #7B1FA2; display: inline-block;">
-        ✔️ Completed
+    <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; background: #E8F5E9; color: #2E7D32; display: inline-block;">
+        ✅ Approved
     </span>
 </td>
 <td data-label="Action">
@@ -558,7 +558,7 @@ function confirmAction(id, action) {
     
     if (action === 'restore') {
         title.innerText = '♻️ Restore this reservation?';
-        message.innerText = 'This will move it back to the active reservations list.';
+        message.innerText = 'This will move it back to pending reservations with pending status.';
         yesBtn.innerText = 'Restore';
         yesBtn.style.background = '#2e7d32';
     } else if (action === 'delete') {
