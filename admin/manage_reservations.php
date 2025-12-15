@@ -10,9 +10,9 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// --- ARCHIVE Reservation ---
-if (isset($_GET['archive'])) {
-    $id = intval($_GET['archive']);
+// --- MARK AS COMPLETED (replaces archive functionality) ---
+if (isset($_GET['complete'])) {
+    $id = intval($_GET['complete']);
 
     $stmt = $conn->prepare("
         SELECT r.id, c.name AS customer_name, r.vehicle_make, r.vehicle_model, r.reservation_date, r.reservation_time
@@ -25,15 +25,16 @@ if (isset($_GET['archive'])) {
     $reservation = $stmt->get_result()->fetch_assoc();
 
     if ($reservation) {
-        $update = $conn->prepare("UPDATE reservations SET archived = 1 WHERE id = ?");
+        // Mark as completed instead of archived
+        $update = $conn->prepare("UPDATE reservations SET status = 'completed', archived = 1 WHERE id = ?");
         $update->bind_param("i", $id);
         $update->execute();
 
-        $desc = "Reservation #{$reservation['id']} ({$reservation['customer_name']} - {$reservation['vehicle_make']} {$reservation['vehicle_model']}) scheduled on {$reservation['reservation_date']} at {$reservation['reservation_time']} was archived by admin '{$_SESSION['username']}'.";
-        logAudit('RESERVATION_ARCHIVED', $desc, $_SESSION['user_id'], $_SESSION['username']);
+        $desc = "Reservation #{$reservation['id']} ({$reservation['customer_name']} - {$reservation['vehicle_make']} {$reservation['vehicle_model']}) marked as completed by admin '{$_SESSION['username']}'.";
+        logAudit('RESERVATION_COMPLETED', $desc, $_SESSION['user_id'], $_SESSION['username']);
     }
 
-    $_SESSION['notif'] = ['message' => 'Reservation archived!', 'type' => 'info'];
+    $_SESSION['notif'] = ['message' => 'Reservation marked as completed!', 'type' => 'success'];
     header("Location: manage_reservations.php");
     exit();
 }
@@ -47,7 +48,7 @@ if (isset($_GET['approve'])) {
         FROM reservations r
         JOIN customers c ON r.customer_id = c.id
         WHERE r.id = ? 
-        AND r.status NOT IN ('approved', 'declined')
+        AND r.status NOT IN ('approved', 'declined', 'completed')
         AND (r.status = 'pending_verification' OR r.method = 'Walk-In')
     ");
     $stmt->bind_param("i", $id);
@@ -126,33 +127,13 @@ if (isset($_GET['decline'])) {
     exit();
 }
 
-// --- FETCH Status Counts ---
-$status_counts = [
-    'pending_verification' => 0,
-    'confirmed' => 0,
-    'approved' => 0,
-    'declined' => 0,
-    'completed' => 0
-];
-
-$status_query = $conn->query("
-    SELECT status, COUNT(*) as count 
-    FROM reservations 
-    WHERE archived = 0 
-    GROUP BY status
-");
-
-while ($row = $status_query->fetch_assoc()) {
-    $status_counts[$row['status']] = $row['count'];
-}
-
-// --- FETCH Active Reservations ---
+// --- FETCH Active Reservations (not completed/archived) ---
 $reservations_stmt = $conn->prepare("
     SELECT r.id, c.name AS customer_name, r.vehicle_make, r.vehicle_model, 
            r.reservation_date, r.reservation_time, r.status, r.method
     FROM reservations r
     JOIN customers c ON r.customer_id = c.id
-    WHERE r.archived = 0
+    WHERE r.archived = 0 AND r.status != 'completed'
     ORDER BY r.reservation_date DESC, r.reservation_time DESC
 ");
 $reservations_stmt->execute();
@@ -198,7 +179,6 @@ body {
     font-weight: 800; 
 }
 
-/* Mobile toggle button */
 .navbar-toggle {
     display: none;
     background: var(--primary-red);
@@ -253,79 +233,6 @@ h1 {
     box-shadow: var(--shadow-md); 
     border: 2px solid rgba(220,20,60,0.1); 
     margin-bottom: 25px; 
-}
-
-/* Status Summary Cards */
-.status-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.status-card {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: 25px;
-    text-align: center;
-    box-shadow: var(--shadow-md);
-    border: 2px solid;
-    transition: var(--transition-normal);
-}
-
-.status-card:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--shadow-xl);
-}
-
-.status-card.pending {
-    border-color: #FFA726;
-    background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
-}
-
-.status-card.confirmed {
-    border-color: #42A5F5;
-    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-}
-
-.status-card.approved {
-    border-color: #66BB6A;
-    background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-}
-
-.status-card.declined {
-    border-color: #EF5350;
-    background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
-}
-
-.status-card.completed {
-    border-color: #AB47BC;
-    background: linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%);
-}
-
-.status-card .count {
-    font-size: 3rem;
-    font-weight: 800;
-    margin: 10px 0;
-}
-
-.status-card.pending .count { color: #F57C00; }
-.status-card.confirmed .count { color: #1976D2; }
-.status-card.approved .count { color: #388E3C; }
-.status-card.declined .count { color: #D32F2F; }
-.status-card.completed .count { color: #7B1FA2; }
-
-.status-card .label {
-    font-size: 0.95rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #555;
-}
-
-.status-card .icon {
-    font-size: 2.5rem;
-    margin-bottom: 10px;
 }
 
 table { 
@@ -414,7 +321,7 @@ table a:hover {
 
 .confirm-box h3 { 
     margin-bottom: 15px; 
-    color: #b71c1c; 
+    color: #2e7d32; 
 }
 
 .confirm-box button { 
@@ -429,7 +336,7 @@ table a:hover {
 }
 
 .confirm-yes { 
-    background: #d32f2f; 
+    background: #2e7d32; 
     color: white; 
 }
 
@@ -459,14 +366,14 @@ table a:hover {
     background-color: #218838;
 }
 
-.archive-btn {
-    background-color: #f0ad4e;
+.complete-btn {
+    background-color: #7B1FA2;
     color: white;
     margin-left: 10px;
 }
 
-.archive-btn:hover {
-    background-color: #ec971f;
+.complete-btn:hover {
+    background-color: #6A1B9A;
 }
 
 .decline-btn {
@@ -499,10 +406,6 @@ table a:hover {
     
     .card { 
         padding: 20px; 
-    }
-    
-    .status-summary { 
-        grid-template-columns: 1fr; 
     }
     
     .notif-toast {
@@ -564,7 +467,7 @@ table a:hover {
         margin: 6px 0; 
     }
     
-    .archive-btn, .decline-btn { 
+    .complete-btn, .decline-btn { 
         margin-left: 0; 
     }
 }
@@ -576,10 +479,6 @@ table a:hover {
     
     .navbar {
         padding: 12px 20px;
-    }
-    
-    .status-card .count {
-        font-size: 2rem;
     }
 }
 </style>
@@ -614,7 +513,7 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
             <li><a href="manage_services.php">Manage Services</a></li>
         <?php endif; ?>
         <li><a href="manage_reservations.php" class="active">Reservations</a></li>
-        <li><a href="archived_reservations.php">Archived Reservations</a></li>
+        <li><a href="completed_reservations.php">Completed</a></li>
         <?php if($_SESSION['role']==='superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
@@ -623,7 +522,7 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 </nav>
 
 <div class="container">
-<h1>Manage Reservations</h1>
+<h1>Manage Active Reservations</h1>
 
 <div class="card">
 <table class="reservations-table">
@@ -685,9 +584,6 @@ while($s = $services_result->fetch_assoc()){ $services[] = $s; }
             case 'declined':
                 echo 'background: #FFEBEE; color: #D32F2F;';
                 break;
-            case 'completed':
-                echo 'background: #F3E5F5; color: #7B1FA2;';
-                break;
         }
         ?>
     ">
@@ -702,12 +598,13 @@ if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
     echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
 } else if ($row['status'] === 'approved') {
     echo '<span style="color:green;">Approved</span>';
+    echo '<button class="action-btn complete-btn" onclick="openActionModal(' . $row['id'] . ', \'complete\')">✔️ Mark Complete</button>';
     echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
 } else if ($row['status'] === 'declined') {
     echo '<span style="color:#c62828;">Declined</span>';
+    echo '<button class="action-btn complete-btn" onclick="openActionModal(' . $row['id'] . ', \'complete\')">✔️ Mark Complete</button>';
 }
 ?>
-<button class="action-btn archive-btn" onclick="openActionModal(<?php echo $row['id']; ?>, 'archive')">📦 Archive</button>
 </td>
 </tr>
 <?php endwhile; ?>
@@ -718,9 +615,9 @@ if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
 
 <div id="confirmModal" class="confirm-modal">
 <div class="confirm-box">
-<h3>Archive this reservation?</h3>
-<p>This will move the reservation to archived list.</p>
-<button class="confirm-yes" id="confirmYes">Archive</button>
+<h3>Confirm Action?</h3>
+<p>Please confirm this action.</p>
+<button class="confirm-yes" id="confirmYes">Confirm</button>
 <button class="confirm-no" onclick="closeModal()">Cancel</button>
 </div>
 </div>
@@ -763,12 +660,19 @@ let pendingAction = { id: null, type: null };
 function openActionModal(id, action){
     pendingAction = { id, type: action };
     const modal = document.getElementById('confirmModal');
-    const title = action === 'decline' ? 'Decline this reservation?' : 'Archive this reservation?';
-    const message = action === 'decline' ? 'This will mark the reservation as declined.' : 'This will move the reservation to archived list.';
-    const cta = action === 'decline' ? 'Decline' : 'Archive';
-    modal.querySelector('h3').innerText = title;
-    modal.querySelector('p').innerText = message;
-    modal.querySelector('#confirmYes').innerText = cta;
+    
+    if (action === 'decline') {
+        modal.querySelector('h3').innerText = 'Decline this reservation?';
+        modal.querySelector('p').innerText = 'This will mark the reservation as declined.';
+        modal.querySelector('#confirmYes').innerText = 'Decline';
+        modal.querySelector('.confirm-yes').style.background = '#c62828';
+    } else if (action === 'complete') {
+        modal.querySelector('h3').innerText = 'Mark as Completed?';
+        modal.querySelector('p').innerText = 'This reservation will be moved to the completed list.';
+        modal.querySelector('#confirmYes').innerText = 'Mark Complete';
+        modal.querySelector('.confirm-yes').style.background = '#2e7d32';
+    }
+    
     modal.style.display = 'flex';
 }
 
@@ -776,8 +680,8 @@ document.getElementById('confirmYes').onclick = function(){
     if(!pendingAction.id || !pendingAction.type) return;
     if(pendingAction.type === 'decline'){
         window.location.href = "manage_reservations.php?decline=" + pendingAction.id;
-    } else if(pendingAction.type === 'archive'){
-        window.location.href = "manage_reservations.php?archive=" + pendingAction.id;
+    } else if(pendingAction.type === 'complete'){
+        window.location.href = "manage_reservations.php?complete=" + pendingAction.id;
     }
 };
 
