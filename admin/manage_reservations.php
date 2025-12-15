@@ -10,36 +10,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// --- MARK AS COMPLETED (replaces archive functionality) ---
-if (isset($_GET['complete'])) {
-    $id = intval($_GET['complete']);
-
-    $stmt = $conn->prepare("
-        SELECT r.id, c.name AS customer_name, r.vehicle_make, r.vehicle_model, r.reservation_date, r.reservation_time
-        FROM reservations r
-        JOIN customers c ON r.customer_id = c.id
-        WHERE r.id = ?
-    ");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $reservation = $stmt->get_result()->fetch_assoc();
-
-    if ($reservation) {
-        // Mark as completed instead of archived
-        $update = $conn->prepare("UPDATE reservations SET status = 'completed', archived = 1 WHERE id = ?");
-        $update->bind_param("i", $id);
-        $update->execute();
-
-        $desc = "Reservation #{$reservation['id']} ({$reservation['customer_name']} - {$reservation['vehicle_make']} {$reservation['vehicle_model']}) marked as completed by admin '{$_SESSION['username']}'.";
-        logAudit('RESERVATION_COMPLETED', $desc, $_SESSION['user_id'], $_SESSION['username']);
-    }
-
-    $_SESSION['notif'] = ['message' => 'Reservation marked as completed!', 'type' => 'success'];
-    header("Location: manage_reservations.php");
-    exit();
-}
-
-// --- APPROVE Reservation ---
+// --- APPROVE Reservation (moves to completed) ---
 if (isset($_GET['approve'])) {
     $id = intval($_GET['approve']);
     
@@ -48,56 +19,51 @@ if (isset($_GET['approve'])) {
         FROM reservations r
         JOIN customers c ON r.customer_id = c.id
         WHERE r.id = ? 
-        AND r.status NOT IN ('approved', 'declined', 'completed')
-        AND (r.status = 'pending_verification' OR r.method = 'Walk-In')
+        AND r.archived = 0
     ");
     $stmt->bind_param("i", $id);
     $stmt->execute();
     $res = $stmt->get_result()->fetch_assoc();
 
     if ($res) {
-        $update = $conn->prepare("UPDATE reservations SET status = 'approved' WHERE id = ?");
+        // Move to completed (archived = 1, status = 'approved')
+        $update = $conn->prepare("UPDATE reservations SET status = 'approved', archived = 1 WHERE id = ?");
         $update->bind_param("i", $id);
         $update->execute();
 
-        $stmt = $conn->prepare("SELECT status FROM reservations WHERE id = ?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $status_result = $stmt->get_result()->fetch_assoc();
+        // Log audit trail
+        $desc = "Reservation #{$res['id']} for {$res['vehicle_make']} {$res['vehicle_model']} approved and moved to completed by admin '{$_SESSION['username']}'";
+        logAudit('RESERVATION_APPROVED', $desc, $_SESSION['user_id'], $_SESSION['username']);
+        
+        // Send email notification
+        if (function_exists('sendEmail') && !empty($res['customer_email'])) {
+            $to = $res['customer_email'];
+            $name = htmlspecialchars($res['customer_name']);
+            $date = htmlspecialchars($res['reservation_date']);
+            $time = htmlspecialchars(date("g:i A", strtotime($res['reservation_time'])));
+            $vehicle = htmlspecialchars($res['vehicle_make'] . ' ' . $res['vehicle_model'] . ' (' . $res['vehicle_year'] . ')');
+            $subject = "Reservation Approved - Auto Repair Center";
+            $body_html = "
+                <p>Dear <b>$name</b>,</p>
+                <p>Your reservation has been <b>approved</b>!</p>
+                <p><b>Reservation Details:</b></p>
+                <ul>
+                    <li><b>Vehicle:</b> $vehicle</li>
+                    <li><b>Date:</b> $date</li>
+                    <li><b>Time:</b> $time</li>
+                </ul>
+                <p>We look forward to serving you on your scheduled date and time.</p>
+                <p>Thank you,<br><b>AutoRepair Center</b></p>
+            ";
+            $body_text = "Dear $name,\n\nYour reservation has been approved!\n\nReservation Details:\n- Vehicle: $vehicle\n- Date: $date\n- Time: $time\n\nWe look forward to serving you on your scheduled date and time.\n\nThank you,\nAutoRepair Center";
 
-        if ($status_result['status'] === 'approved') {
-            $desc = "Reservation #{$res['id']} for {$res['vehicle_make']} {$res['vehicle_model']} approved by admin '{$_SESSION['username']}'";
-            logAudit('RESERVATION_APPROVED', $desc, $_SESSION['user_id'], $_SESSION['username']);
-            
-            if (function_exists('sendEmail') && !empty($res['customer_email'])) {
-                $to = $res['customer_email'];
-                $name = htmlspecialchars($res['customer_name']);
-                $date = htmlspecialchars($res['reservation_date']);
-                $time = htmlspecialchars(date("g:i A", strtotime($res['reservation_time'])));
-                $vehicle = htmlspecialchars($res['vehicle_make'] . ' ' . $res['vehicle_model'] . ' (' . $res['vehicle_year'] . ')');
-                $subject = "Reservation Approved - Auto Repair Center";
-                $body_html = "
-                    <p>Dear <b>$name</b>,</p>
-                    <p>Your reservation has been <b>approved</b>!</p>
-                    <p><b>Reservation Details:</b></p>
-                    <ul>
-                        <li><b>Vehicle:</b> $vehicle</li>
-                        <li><b>Date:</b> $date</li>
-                        <li><b>Time:</b> $time</li>
-                    </ul>
-                    <p>We look forward to serving you on your scheduled date and time.</p>
-                    <p>Thank you,<br><b>AutoRepair Center</b></p>
-                ";
-                $body_text = "Dear $name,\n\nYour reservation has been approved!\n\nReservation Details:\n- Vehicle: $vehicle\n- Date: $date\n- Time: $time\n\nWe look forward to serving you on your scheduled date and time.\n\nThank you,\nAutoRepair Center";
-
-                list($sent, $err) = sendEmail($to, $subject, $body_html, $body_text);
-                if (!$sent) {
-                    error_log("Failed to send reservation approval email to $to: $err");
-                }
+            list($sent, $err) = sendEmail($to, $subject, $body_html, $body_text);
+            if (!$sent) {
+                error_log("Failed to send reservation approval email to $to: $err");
             }
-            
-            $_SESSION['notif'] = ['message' => 'Reservation approved successfully!', 'type' => 'success'];
         }
+        
+        $_SESSION['notif'] = ['message' => 'Reservation approved and moved to completed!', 'type' => 'success'];
     }
     
     header("Location: manage_reservations.php");
@@ -108,7 +74,7 @@ if (isset($_GET['approve'])) {
 if (isset($_GET['decline'])) {
     $id = intval($_GET['decline']);
 
-    $stmt = $conn->prepare("SELECT * FROM reservations WHERE id = ? AND status IN ('pending_verification','approved')");
+    $stmt = $conn->prepare("SELECT * FROM reservations WHERE id = ? AND archived = 0");
     $stmt->bind_param("i", $id);
     $stmt->execute();
     $res = $stmt->get_result()->fetch_assoc();
@@ -133,7 +99,7 @@ $reservations_stmt = $conn->prepare("
            r.reservation_date, r.reservation_time, r.status, r.method
     FROM reservations r
     JOIN customers c ON r.customer_id = c.id
-    WHERE r.archived = 0 AND r.status != 'completed'
+    WHERE r.archived = 0
     ORDER BY r.reservation_date DESC, r.reservation_time DESC
 ");
 $reservations_stmt->execute();
@@ -321,7 +287,6 @@ table a:hover {
 
 .confirm-box h3 { 
     margin-bottom: 15px; 
-    color: #2e7d32; 
 }
 
 .confirm-box button { 
@@ -366,16 +331,6 @@ table a:hover {
     background-color: #218838;
 }
 
-.complete-btn {
-    background-color: #7B1FA2;
-    color: white;
-    margin-left: 10px;
-}
-
-.complete-btn:hover {
-    background-color: #6A1B9A;
-}
-
 .decline-btn {
     background-color: #c62828;
     color: white;
@@ -384,6 +339,15 @@ table a:hover {
 
 .decline-btn:hover {
     background-color: #b71c1c;
+}
+
+.info-badge {
+    background: #E3F2FD;
+    color: #1976D2;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #1976D2;
 }
 
 /* Mobile responsiveness */
@@ -467,7 +431,7 @@ table a:hover {
         margin: 6px 0; 
     }
     
-    .complete-btn, .decline-btn { 
+    .decline-btn { 
         margin-left: 0; 
     }
 }
@@ -488,7 +452,7 @@ table a:hover {
 <?php if(isset($_SESSION['notif'])): 
 $type = $_SESSION['notif']['type'];
 $message = $_SESSION['notif']['message'];
-$color = $type === 'success' ? '#28a745' : '#dc3545';
+$color = $type === 'success' ? '#28a745' : ($type === 'info' ? '#17a2b8' : '#dc3545');
 ?>
 <div class="notif-toast" id="notifToast" style="background: <?php echo $color; ?>">
 <?php echo htmlspecialchars($message); ?>
@@ -522,7 +486,11 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 </nav>
 
 <div class="container">
-<h1>Manage Active Reservations</h1>
+<h1>Manage Pending Reservations</h1>
+
+<div class="info-badge">
+    <strong><i class="fas fa-info-circle"></i> Info:</strong> Approving a reservation will automatically move it to the completed list. Declined reservations remain here.
+</div>
 
 <div class="card">
 <table class="reservations-table">
@@ -540,19 +508,26 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 </thead>
 <tbody>
 
-<?php while($row = $reservations_result->fetch_assoc()):
-$res_id = $row['id'];
-$services_stmt = $conn->prepare("
-    SELECT s.service_name, s.duration, s.price
-    FROM reservation_services rs
-    JOIN services s ON rs.service_id = s.id
-    WHERE rs.reservation_id = ?
-");
-$services_stmt->bind_param("i", $res_id);
-$services_stmt->execute();
-$services_result = $services_stmt->get_result();
-$services = [];
-while($s = $services_result->fetch_assoc()){ $services[] = $s; }
+<?php 
+if ($reservations_result->num_rows === 0) {
+    echo '<tr><td colspan="8" style="text-align:center; padding: 40px;">
+            <i class="fas fa-inbox fa-3x" style="color: #ccc; margin-bottom: 15px;"></i>
+            <p style="color: #999; font-size: 1.1rem;">No pending reservations.</p>
+          </td></tr>';
+} else {
+    while($row = $reservations_result->fetch_assoc()):
+    $res_id = $row['id'];
+    $services_stmt = $conn->prepare("
+        SELECT s.service_name, s.duration, s.price
+        FROM reservation_services rs
+        JOIN services s ON rs.service_id = s.id
+        WHERE rs.reservation_id = ?
+    ");
+    $services_stmt->bind_param("i", $res_id);
+    $services_stmt->execute();
+    $services_result = $services_stmt->get_result();
+    $services = [];
+    while($s = $services_result->fetch_assoc()){ $services[] = $s; }
 ?>
 <tr>
 <td data-label="Customer"><?php echo htmlspecialchars($row['customer_name']); ?></td>
@@ -573,17 +548,17 @@ while($s = $services_result->fetch_assoc()){ $services[] = $s; }
         <?php 
         switch($row['status']) {
             case 'pending_verification':
+            case 'pending':
                 echo 'background: #FFF3E0; color: #F57C00;';
                 break;
             case 'confirmed':
                 echo 'background: #E3F2FD; color: #1976D2;';
                 break;
-            case 'approved':
-                echo 'background: #E8F5E9; color: #388E3C;';
-                break;
             case 'declined':
                 echo 'background: #FFEBEE; color: #D32F2F;';
                 break;
+            default:
+                echo 'background: #F5F5F5; color: #666;';
         }
         ?>
     ">
@@ -592,22 +567,19 @@ while($s = $services_result->fetch_assoc()){ $services[] = $s; }
 </td>
 <td data-label="Action">
 <?php 
-$canApproveWalkIn = $row['method'] === 'Walk-In' && $row['status'] !== 'approved' && $row['status'] !== 'declined';
-if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
-    echo '<button class="action-btn approve-btn" onclick="window.location.href=\'manage_reservations.php?approve=' . $row['id'] . '\'">✅ Approve</button>';
-    echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
-} else if ($row['status'] === 'approved') {
-    echo '<span style="color:green;">Approved</span>';
-    echo '<button class="action-btn complete-btn" onclick="openActionModal(' . $row['id'] . ', \'complete\')">✔️ Mark Complete</button>';
-    echo '<button class="action-btn decline-btn" onclick="openActionModal(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
-} else if ($row['status'] === 'declined') {
-    echo '<span style="color:#c62828;">Declined</span>';
-    echo '<button class="action-btn complete-btn" onclick="openActionModal(' . $row['id'] . ', \'complete\')">✔️ Mark Complete</button>';
+if ($row['status'] !== 'declined') {
+    echo '<button class="action-btn approve-btn" onclick="confirmAction(' . $row['id'] . ', \'approve\')">✅ Approve</button>';
+    echo '<button class="action-btn decline-btn" onclick="confirmAction(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
+} else {
+    echo '<span style="color:#c62828; font-weight: 600;">Declined</span>';
 }
 ?>
 </td>
 </tr>
-<?php endwhile; ?>
+<?php 
+    endwhile;
+}
+?>
 </tbody>
 </table>
 </div>
@@ -615,8 +587,8 @@ if ($row['status'] === 'pending_verification' || $canApproveWalkIn) {
 
 <div id="confirmModal" class="confirm-modal">
 <div class="confirm-box">
-<h3>Confirm Action?</h3>
-<p>Please confirm this action.</p>
+<h3 id="modalTitle">Confirm Action?</h3>
+<p id="modalMessage">Please confirm this action.</p>
 <button class="confirm-yes" id="confirmYes">Confirm</button>
 <button class="confirm-no" onclick="closeModal()">Cancel</button>
 </div>
@@ -654,23 +626,26 @@ window.addEventListener('resize', function() {
     }
 });
 
-// Action modal functionality
+// Action confirmation
 let pendingAction = { id: null, type: null };
 
-function openActionModal(id, action){
+function confirmAction(id, action){
     pendingAction = { id, type: action };
     const modal = document.getElementById('confirmModal');
+    const title = document.getElementById('modalTitle');
+    const message = document.getElementById('modalMessage');
+    const yesBtn = document.getElementById('confirmYes');
     
-    if (action === 'decline') {
-        modal.querySelector('h3').innerText = 'Decline this reservation?';
-        modal.querySelector('p').innerText = 'This will mark the reservation as declined.';
-        modal.querySelector('#confirmYes').innerText = 'Decline';
-        modal.querySelector('.confirm-yes').style.background = '#c62828';
-    } else if (action === 'complete') {
-        modal.querySelector('h3').innerText = 'Mark as Completed?';
-        modal.querySelector('p').innerText = 'This reservation will be moved to the completed list.';
-        modal.querySelector('#confirmYes').innerText = 'Mark Complete';
-        modal.querySelector('.confirm-yes').style.background = '#2e7d32';
+    if (action === 'approve') {
+        title.innerText = '✅ Approve this reservation?';
+        message.innerText = 'This will move the reservation to completed and notify the customer.';
+        yesBtn.innerText = 'Approve';
+        yesBtn.style.background = '#2e7d32';
+    } else if (action === 'decline') {
+        title.innerText = '⛔ Decline this reservation?';
+        message.innerText = 'This reservation will be marked as declined.';
+        yesBtn.innerText = 'Decline';
+        yesBtn.style.background = '#c62828';
     }
     
     modal.style.display = 'flex';
@@ -678,10 +653,11 @@ function openActionModal(id, action){
 
 document.getElementById('confirmYes').onclick = function(){
     if(!pendingAction.id || !pendingAction.type) return;
-    if(pendingAction.type === 'decline'){
+    
+    if(pendingAction.type === 'approve'){
+        window.location.href = "manage_reservations.php?approve=" + pendingAction.id;
+    } else if(pendingAction.type === 'decline'){
         window.location.href = "manage_reservations.php?decline=" + pendingAction.id;
-    } else if(pendingAction.type === 'complete'){
-        window.location.href = "manage_reservations.php?complete=" + pendingAction.id;
     }
 };
 
