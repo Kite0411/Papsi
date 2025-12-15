@@ -20,25 +20,65 @@ if (isset($_GET['restore'])) {
     $reservation = $stmt->get_result()->fetch_assoc();
 
     if ($reservation) {
-        $update = $conn->prepare("UPDATE reservations SET archived = 0 WHERE id = ?");
+        // Restore to approved status
+        $update = $conn->prepare("UPDATE reservations SET archived = 0, status = 'approved' WHERE id = ?");
         $update->bind_param("i", $id);
         $update->execute();
 
         // Log audit trail
-        $desc = "Reservation #{$reservation['id']} restored by admin '{$_SESSION['username']}'.";
+        $desc = "Reservation #{$reservation['id']} restored from completed by admin '{$_SESSION['username']}'.";
         logAudit('RESERVATION_RESTORED', $desc, $_SESSION['user_id'], $_SESSION['username']);
     }
 
     $_SESSION['notif'] = [
-        'message' => 'Reservation restored!',
+        'message' => 'Reservation restored to active list!',
         'type' => 'success'
     ];
-    header("Location: archived_reservations.php");
+    header("Location: completed_reservations.php");
     exit();
 }
 
-// --- FETCH Archived Reservations ---
-$archived_stmt = $conn->prepare("
+// --- DELETE Reservation PERMANENTLY ---
+if (isset($_GET['delete'])) {
+    $id = intval($_GET['delete']);
+
+    // Get reservation details before deleting
+    $stmt = $conn->prepare("
+        SELECT r.*, c.name AS customer_name 
+        FROM reservations r
+        JOIN customers c ON r.customer_id = c.id
+        WHERE r.id = ? AND r.archived = 1
+    ");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $reservation = $stmt->get_result()->fetch_assoc();
+
+    if ($reservation) {
+        // Delete related reservation_services first
+        $delete_services = $conn->prepare("DELETE FROM reservation_services WHERE reservation_id = ?");
+        $delete_services->bind_param("i", $id);
+        $delete_services->execute();
+
+        // Delete the reservation
+        $delete = $conn->prepare("DELETE FROM reservations WHERE id = ?");
+        $delete->bind_param("i", $id);
+        $delete->execute();
+
+        // Log audit trail
+        $desc = "Reservation #{$reservation['id']} ({$reservation['customer_name']} - {$reservation['vehicle_make']} {$reservation['vehicle_model']}) permanently deleted by admin '{$_SESSION['username']}'.";
+        logAudit('RESERVATION_DELETED', $desc, $_SESSION['user_id'], $_SESSION['username']);
+    }
+
+    $_SESSION['notif'] = [
+        'message' => 'Reservation permanently deleted!',
+        'type' => 'success'
+    ];
+    header("Location: completed_reservations.php");
+    exit();
+}
+
+// --- FETCH Completed Reservations ---
+$completed_stmt = $conn->prepare("
     SELECT r.id, c.name AS customer_name, r.vehicle_make, r.vehicle_model,
         r.reservation_date, r.reservation_time, r.status, r.method
     FROM reservations r
@@ -46,8 +86,8 @@ $archived_stmt = $conn->prepare("
     WHERE r.archived = 1
     ORDER BY r.reservation_date DESC, r.reservation_time DESC
 ");
-$archived_stmt->execute();
-$archived_result = $archived_stmt->get_result();
+$completed_stmt->execute();
+$completed_result = $completed_stmt->get_result();
 ?>
 
 <!DOCTYPE html>
@@ -55,7 +95,7 @@ $archived_result = $archived_stmt->get_result();
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Archived Reservations - Auto Repair Admin</title>
+<title>Completed Reservations - Auto Repair Admin</title>
 <link rel="stylesheet" href="../assets/css/style.css">
 <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -89,7 +129,6 @@ body {
     font-weight: 800; 
 }
 
-/* Mobile toggle button */
 .navbar-toggle {
     display: none;
     background: var(--primary-red);
@@ -234,7 +273,6 @@ table a:hover {
 
 .confirm-box h3 { 
     margin-bottom: 15px; 
-    color: #2e7d32; 
 }
 
 .confirm-box button { 
@@ -255,6 +293,15 @@ table a:hover {
 
 .confirm-no { 
     background: #ccc; 
+}
+
+.info-badge {
+    background: #E3F2FD;
+    color: #1976D2;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #1976D2;
 }
 
 /* Mobile responsiveness */
@@ -366,15 +413,31 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
     </button>
     
     <ul id="navMenu">
-        <li><a href="archived_reservations.php" class="active">Archived Reservations</a></li>
-        <li><a href="manage_reservations.php">Manage Reservations</a></li>
+        <?php if($_SESSION['role']==='superadmin'): ?>
+            <li><a href="index.php">Dashboard</a></li>
+        <?php endif; ?>
+        <li><a href="walk_in.php">Manage Walk-In</a></li>
+        <li><a href="manage_payments.php">Payments</a></li>
+        <?php if ($_SESSION['role'] === 'superadmin'): ?>
+            <li><a href="manage_services.php">Manage Services</a></li>
+        <?php endif; ?>
+        <li><a href="manage_reservations.php">Reservations</a></li>
+        <li><a href="completed_reservations.php" class="active">Completed</a></li>
+        <?php if($_SESSION['role']==='superadmin'): ?>
+            <li><a href="audit_trail.php">Audit Trail</a></li>
+        <?php endif; ?>
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
     </ul>
 </nav>
 
 <div class="container">
 <div class="card">
-<h1>Archived Reservations</h1>
+<h1>📋 Completed Reservations</h1>
+
+<div class="info-badge">
+    <strong><i class="fas fa-info-circle"></i> Info:</strong> These are reservations that have been marked as completed. You can restore them back to active status or permanently delete them.
+</div>
+
 <table>
 <thead>
 <tr>
@@ -384,12 +447,20 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 <th>Price</th>
 <th>Date</th>
 <th>Time</th>
+<th>Status</th>
 <th>Action</th>
 </tr>
 </thead>
 <tbody>
 
-<?php while ($row = $archived_result->fetch_assoc()):
+<?php 
+if ($completed_result->num_rows === 0) {
+    echo '<tr><td colspan="8" style="text-align:center; padding: 40px;">
+            <i class="fas fa-inbox fa-3x" style="color: #ccc; margin-bottom: 15px;"></i>
+            <p style="color: #999; font-size: 1.1rem;">No completed reservations yet.</p>
+          </td></tr>';
+} else {
+    while ($row = $completed_result->fetch_assoc()):
     $res_id = $row['id'];
 
     // Fetch services using prepared statement
@@ -415,11 +486,20 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 <td data-label="Price"><?php foreach($services as $s){ echo "₱".number_format($s['price'],2)."<br>"; } ?></td>
 <td data-label="Date"><?php echo date("M j, Y", strtotime($row['reservation_date'])); ?></td>
 <td data-label="Time"><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
+<td data-label="Status">
+    <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; background: #F3E5F5; color: #7B1FA2; display: inline-block;">
+        ✔️ Completed
+    </span>
+</td>
 <td data-label="Action">
-<a href="#" onclick="confirmRestore(<?php echo $row['id']; ?>); return false;">♻️ Restore</a>
+<a href="#" onclick="confirmAction(<?php echo $row['id']; ?>, 'restore'); return false;">♻️ Restore</a>
+<a href="#" onclick="confirmAction(<?php echo $row['id']; ?>, 'delete'); return false;" style="color: #c62828;">🗑️ Delete</a>
 </td>
 </tr>
-<?php endwhile; ?>
+<?php 
+    endwhile;
+}
+?>
 </tbody>
 </table>
 </div>
@@ -427,9 +507,9 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 
 <div id="confirmModal" class="confirm-modal">
 <div class="confirm-box">
-<h3>Restore this reservation?</h3>
-<p>This will move the reservation back to active reservations.</p>
-<button class="confirm-yes" id="confirmYes">Restore</button>
+<h3 id="modalTitle">Confirm Action?</h3>
+<p id="modalMessage">Are you sure?</p>
+<button class="confirm-yes" id="confirmYes">Confirm</button>
 <button class="confirm-no" onclick="closeModal()">Cancel</button>
 </div>
 </div>
@@ -466,20 +546,38 @@ window.addEventListener('resize', function() {
     }
 });
 
-// Restore functionality
-let restoreId = null;
+// Action confirmation
+let pendingAction = { id: null, type: null };
 
-function confirmRestore(id) {
-    restoreId = id;
+function confirmAction(id, action) {
+    pendingAction = { id, type: action };
     const modal = document.getElementById('confirmModal');
-    modal.querySelector('h3').innerText = 'Restore this reservation?';
-    modal.querySelector('#confirmYes').innerText = 'Restore';
+    const title = document.getElementById('modalTitle');
+    const message = document.getElementById('modalMessage');
+    const yesBtn = document.getElementById('confirmYes');
+    
+    if (action === 'restore') {
+        title.innerText = '♻️ Restore this reservation?';
+        message.innerText = 'This will move it back to the active reservations list.';
+        yesBtn.innerText = 'Restore';
+        yesBtn.style.background = '#2e7d32';
+    } else if (action === 'delete') {
+        title.innerText = '🗑️ Delete this reservation?';
+        message.innerText = 'This action CANNOT be undone. The reservation will be permanently deleted.';
+        yesBtn.innerText = 'Delete';
+        yesBtn.style.background = '#c62828';
+    }
+    
     modal.style.display = 'flex';
 }
 
 document.getElementById('confirmYes').onclick = function() {
-    if (restoreId) {
-        window.location.href = "archived_reservations.php?restore=" + restoreId;
+    if (!pendingAction.id || !pendingAction.type) return;
+    
+    if (pendingAction.type === 'restore') {
+        window.location.href = "completed_reservations.php?restore=" + pendingAction.id;
+    } else if (pendingAction.type === 'delete') {
+        window.location.href = "completed_reservations.php?delete=" + pendingAction.id;
     }
 };
 
