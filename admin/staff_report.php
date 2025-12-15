@@ -10,6 +10,10 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// ✅ CRITICAL: Staff can only see their OWN actions
+$current_user_id = $_SESSION['user_id'];
+$current_username = $_SESSION['username'];
+
 // --- Pagination setup ---
 $limit = 20;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -17,7 +21,6 @@ $offset = ($page - 1) * $limit;
 
 // --- Filters ---
 $actionType = $_GET['action_type'] ?? '';
-$staffId = $_GET['staff_id'] ?? '';
 $dateFrom = $_GET['date_from'] ?? '';
 $dateTo = $_GET['date_to'] ?? '';
 
@@ -25,7 +28,12 @@ $where = [];
 $params = [];
 $types = '';
 
-// --- Apply filters ---
+// ✅ ALWAYS filter by current user - Staff sees ONLY their own actions
+$where[] = "a.admin_id = ?";
+$params[] = $current_user_id;
+$types .= 'i';
+
+// --- Apply additional filters ---
 // Filter by action type
 if ($actionType !== '') {
     if ($actionType === 'ARCHIVE') {
@@ -52,13 +60,6 @@ if ($actionType !== '') {
         $params[] = $actionType;
         $types .= 's';
     }
-}
-
-// Filter by staff ID
-if ($staffId !== '') {
-    $where[] = "a.admin_id = ?";
-    $params[] = $staffId;
-    $types .= 'i';
 }
 
 // Filter by date range
@@ -96,7 +97,7 @@ if (!empty($paramsForQuery)) {
 }
 $stmt->execute();
 $result = $stmt->get_result();
-$staffActions = $result->fetch_all(MYSQLI_ASSOC);
+$myActions = $result->fetch_all(MYSQLI_ASSOC);
 
 // --- Count for pagination ---
 $countStmt = $conn->prepare($countSql);
@@ -107,56 +108,56 @@ $countStmt->execute();
 $totalRecords = $countStmt->get_result()->fetch_assoc()['total'];
 $totalPages = ceil($totalRecords / $limit);
 
-// --- Fetch all staff members for dropdown ---
-$staffMembers = $conn->query("
-    SELECT DISTINCT admin_id, admin_username 
-    FROM audit_trail 
-    WHERE admin_username IS NOT NULL
-    ORDER BY admin_username
-")->fetch_all(MYSQLI_ASSOC);
-
-// --- Get statistics ---
+// --- Get statistics (only for current user) ---
 $stats = [];
 
-// Total actions
+// Total actions by current user
 $stats['total_actions'] = $totalRecords;
 
-// Actions today
-$todayResult = $conn->query("
+// Actions today by current user
+$todayStmt = $conn->prepare("
     SELECT COUNT(*) as count 
     FROM audit_trail 
     WHERE DATE(created_at) = CURDATE()
+    AND admin_id = ?
 ");
-$stats['today_actions'] = $todayResult->fetch_assoc()['count'];
+$todayStmt->bind_param("i", $current_user_id);
+$todayStmt->execute();
+$stats['today_actions'] = $todayStmt->get_result()->fetch_assoc()['count'];
 
-// Actions this month
-$monthResult = $conn->query("
+// Actions this month by current user
+$monthStmt = $conn->prepare("
     SELECT COUNT(*) as count 
     FROM audit_trail 
     WHERE MONTH(created_at) = MONTH(CURDATE()) 
     AND YEAR(created_at) = YEAR(CURDATE())
+    AND admin_id = ?
 ");
-$stats['month_actions'] = $monthResult->fetch_assoc()['count'];
+$monthStmt->bind_param("i", $current_user_id);
+$monthStmt->execute();
+$stats['month_actions'] = $monthStmt->get_result()->fetch_assoc()['count'];
 
-// Most active staff
-$activeStaffResult = $conn->query("
-    SELECT admin_username, COUNT(*) as action_count
+// Most common action type by current user
+$actionStmt = $conn->prepare("
+    SELECT action_type, COUNT(*) as action_count
     FROM audit_trail
-    WHERE admin_username IS NOT NULL
-    GROUP BY admin_username
+    WHERE admin_id = ?
+    GROUP BY action_type
     ORDER BY action_count DESC
     LIMIT 1
 ");
-$activeStaff = $activeStaffResult->fetch_assoc();
-$stats['most_active'] = $activeStaff ? $activeStaff['admin_username'] : 'N/A';
-$stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
+$actionStmt->bind_param("i", $current_user_id);
+$actionStmt->execute();
+$topAction = $actionStmt->get_result()->fetch_assoc();
+$stats['top_action'] = $topAction ? str_replace('_', ' ', $topAction['action_type']) : 'N/A';
+$stats['top_action_count'] = $topAction ? $topAction['action_count'] : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Activity Report - Admin Panel</title>
+    <title>My Activity Report - Staff Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
@@ -230,6 +231,28 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
             max-width: 1200px;
             margin: 20px auto;
             padding: 0 20px;
+        }
+        
+        .user-info-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .user-info-banner h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+        
+        .user-info-banner p {
+            margin: 0;
+            opacity: 0.95;
+            font-size: 1.1rem;
         }
         
         .stats-grid {
@@ -518,25 +541,21 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
     </button>
     
     <ul id="navMenu">
-        <?php if ($_SESSION['role'] === 'superadmin'): ?>
-            <li><a href="index.php">Dashboard</a></li>
-        <?php endif; ?>
         <li><a href="walk_in.php">Manage Walk-In</a></li>
         <li><a href="manage_payments.php">Payments</a></li>
-        <li><a href="manage_services.php">Manage Services</a></li>
         <li><a href="manage_reservations.php">Reservations</a></li>
-        <li><a href="staff_report.php" class="active">Staff Report</a></li>
-        <?php if ($_SESSION['role'] === 'superadmin'): ?>
-            <li><a href="audit_trail.php">Audit Trail</a></li>
-        <?php endif; ?>
+        <li><a href="completed_reservations.php">Completed</a></li>
+        <li><a href="staff_report.php" class="active">📊 My Report</a></li>
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
     </ul>
 </nav>
 
 <div class="container py-4">
-    <h2 class="mb-4">
-        <i class="fas fa-chart-bar me-2"></i>Staff Activity Report
-    </h2>
+    <!-- User Info Banner -->
+    <div class="user-info-banner">
+        <h3><i class="fas fa-user-circle me-2"></i><?php echo htmlspecialchars($current_username); ?></h3>
+        <p>Your personal activity report - Tracking your contributions</p>
+    </div>
     
     <!-- Statistics Cards -->
     <div class="stats-grid">
@@ -559,19 +578,19 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
         </div>
         
         <div class="stat-card">
-            <div class="icon"><i class="fas fa-user-crown"></i></div>
-            <div class="value"><?php echo htmlspecialchars($stats['most_active']); ?></div>
-            <div class="label">Most Active Staff (<?php echo number_format($stats['most_active_count']); ?> actions)</div>
+            <div class="icon"><i class="fas fa-star"></i></div>
+            <div class="value"><?php echo htmlspecialchars($stats['top_action']); ?></div>
+            <div class="label">Most Common Action (<?php echo number_format($stats['top_action_count']); ?> times)</div>
         </div>
     </div>
 
     <!-- Filter Section -->
     <div class="filter-card">
         <h5 class="mb-3">
-            <i class="fas fa-filter me-2"></i>Filter Reports
+            <i class="fas fa-filter me-2"></i>Filter My Activities
         </h5>
         <form method="GET" class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-5">
                 <label for="action_type" class="form-label">Action Type</label>
                 <select class="form-select" id="action_type" name="action_type">
                     <option value="">All Actions</option>
@@ -585,18 +604,6 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
             </div>
             
             <div class="col-md-3">
-                <label for="staff_id" class="form-label">Staff Member</label>
-                <select class="form-select" id="staff_id" name="staff_id">
-                    <option value="">All Staff</option>
-                    <?php foreach ($staffMembers as $staff): ?>
-                        <option value="<?= $staff['admin_id'] ?>" <?= $staffId == $staff['admin_id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($staff['admin_username']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            
-            <div class="col-md-2">
                 <label for="date_from" class="form-label">Date From</label>
                 <input type="date" class="form-control" id="date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>">
             </div>
@@ -608,17 +615,17 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
             
             <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary w-100">
-                    <i class="fas fa-filter me-2"></i>Apply Filter
+                    <i class="fas fa-filter me-2"></i>Apply
                 </button>
             </div>
         </form>
         
         <div class="mt-3">
             <a href="staff_report.php" class="btn btn-secondary me-2">
-                <i class="fas fa-redo me-2"></i>Clear Filters
+                <i class="fas fa-redo me-2"></i>Clear
             </a>
-            <a href="export_staff_report.php?<?php echo http_build_query($_GET); ?>" class="btn btn-success">
-                <i class="fas fa-download me-2"></i>Export to CSV
+            <a href="export_staff_report.php?staff_id=<?php echo $current_user_id; ?>&<?php echo http_build_query($_GET); ?>" class="btn btn-success">
+                <i class="fas fa-download me-2"></i>Export CSV
             </a>
         </div>
     </div>
@@ -626,14 +633,14 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
     <!-- Report Table -->
     <div class="card">
         <div class="card-header">
-            <i class="fas fa-table me-2"></i>Staff Activity Logs
+            <i class="fas fa-table me-2"></i>My Activity Logs
             <span class="badge bg-light text-dark ms-2"><?= number_format($totalRecords) ?> records</span>
         </div>
         <div class="card-body p-0">
-            <?php if (empty($staffActions)): ?>
+            <?php if (empty($myActions)): ?>
                 <div class="text-center py-5 text-muted">
                     <i class="fas fa-inbox fa-3x mb-3"></i>
-                    <p>No staff activity found matching your filters.</p>
+                    <p>No activity found matching your filters.</p>
                 </div>
             <?php else: ?>
                 <div class="table-responsive">
@@ -641,19 +648,15 @@ $stats['most_active_count'] = $activeStaff ? $activeStaff['action_count'] : 0;
                         <thead>
                             <tr>
                                 <th>Timestamp</th>
-                                <th>Staff Member</th>
                                 <th>Action Type</th>
                                 <th>Description</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($staffActions as $action): ?>
+                            <?php foreach ($myActions as $action): ?>
                                 <tr>
                                     <td data-label="Timestamp">
                                         <small><?= date('M j, Y g:i A', strtotime($action['created_at'])) ?></small>
-                                    </td>
-                                    <td data-label="Staff Member">
-                                        <strong><?= htmlspecialchars($action['admin_username']) ?></strong>
                                     </td>
                                     <td data-label="Action Type">
                                         <span class="badge action-<?= $action['action_type'] ?>">
