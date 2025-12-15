@@ -400,8 +400,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
         <li><a href="manage_reservations.php">Reservations</a></li>
         <li><a href="completed_reservations.php">Completed</a></li>
-        <!-- ✅ CORRECTED: Added .php extension to staff report link -->
-        <li><a href="staff_report.php">📊 Report</a></li>
+        <!-- ✅ Staff Report: Only visible to staff role (shows all staff actions including superadmin) -->
+        <?php if ($_SESSION['role'] === 'staff'): ?>
+            <li><a href="staff_report.php">📊 Report</a></li>
+        <?php endif; ?>
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
