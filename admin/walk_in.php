@@ -68,7 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            $stmt2->bind_param("isssssssi", $customer_id, $vehicle_make, $vehicle_model, $vehicle_year, $reservation_date, $reservation_time, $end_time, $method, $status, $archived);
+            // i=int, s=string - customer_id(i), vehicle_make(s), vehicle_model(s), vehicle_year(s), 
+            // reservation_date(s), reservation_time(s), end_time(s), method(s), status(s), archived(i)
+            $stmt2->bind_param("issssssssi", $customer_id, $vehicle_make, $vehicle_model, $vehicle_year, $reservation_date, $reservation_time, $end_time, $method, $status, $archived);
 
             if ($stmt2->execute()) {
                 $reservation_id = $conn->insert_id;
