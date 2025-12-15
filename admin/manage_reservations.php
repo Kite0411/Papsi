@@ -20,6 +20,7 @@ if (isset($_GET['approve'])) {
         JOIN customers c ON r.customer_id = c.id
         WHERE r.id = ? 
         AND r.archived = 0
+        AND r.status != 'declined'
     ");
     $stmt->bind_param("i", $id);
     $stmt->execute();
@@ -35,27 +36,94 @@ if (isset($_GET['approve'])) {
         $desc = "Reservation #{$res['id']} for {$res['vehicle_make']} {$res['vehicle_model']} approved and moved to completed by admin '{$_SESSION['username']}'";
         logAudit('RESERVATION_APPROVED', $desc, $_SESSION['user_id'], $_SESSION['username']);
         
-        // Send email notification
+        // Send styled email notification
         if (function_exists('sendEmail') && !empty($res['customer_email'])) {
             $to = $res['customer_email'];
             $name = htmlspecialchars($res['customer_name']);
-            $date = htmlspecialchars($res['reservation_date']);
+            $date = htmlspecialchars(date("F d, Y", strtotime($res['reservation_date'])));
             $time = htmlspecialchars(date("g:i A", strtotime($res['reservation_time'])));
             $vehicle = htmlspecialchars($res['vehicle_make'] . ' ' . $res['vehicle_model'] . ' (' . $res['vehicle_year'] . ')');
-            $subject = "Reservation Approved - Auto Repair Center";
+            $subject = "✅ Reservation Approved - Papsi Paps Auto Repair";
+            
             $body_html = "
-                <p>Dear <b>$name</b>,</p>
-                <p>Your reservation has been <b>approved</b>!</p>
-                <p><b>Reservation Details:</b></p>
-                <ul>
-                    <li><b>Vehicle:</b> $vehicle</li>
-                    <li><b>Date:</b> $date</li>
-                    <li><b>Time:</b> $time</li>
-                </ul>
-                <p>We look forward to serving you on your scheduled date and time.</p>
-                <p>Thank you,<br><b>AutoRepair Center</b></p>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset='UTF-8'>
+                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+                    .container { max-width: 600px; margin: 0 auto; background: white; }
+                    .header { background: linear-gradient(135deg, #DC143C, #B71C1C); padding: 40px 20px; text-align: center; }
+                    .header h1 { color: white; margin: 0; font-size: 28px; }
+                    .header p { color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px; }
+                    .content { padding: 40px 30px; }
+                    .success-badge { background: #E8F5E9; color: #2E7D32; padding: 15px 20px; border-radius: 8px; text-align: center; margin-bottom: 30px; border-left: 4px solid #2E7D32; }
+                    .success-badge h2 { margin: 0; color: #2E7D32; font-size: 24px; }
+                    .info-box { background: #f9f9f9; border-left: 4px solid #DC143C; padding: 20px; margin: 20px 0; border-radius: 4px; }
+                    .info-box h3 { margin: 0 0 15px 0; color: #333; font-size: 18px; }
+                    .info-row { display: flex; padding: 8px 0; border-bottom: 1px solid #eee; }
+                    .info-row:last-child { border-bottom: none; }
+                    .info-label { font-weight: 600; color: #666; min-width: 120px; }
+                    .info-value { color: #333; }
+                    .footer { background: #333; color: white; padding: 30px 20px; text-align: center; }
+                    .footer p { margin: 5px 0; font-size: 14px; }
+                    .button { display: inline-block; background: linear-gradient(135deg, #DC143C, #B71C1C); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: 600; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>🔧 Papsi Paps Auto Repair</h1>
+                        <p>Your Trusted Auto Care Partner</p>
+                    </div>
+                    
+                    <div class='content'>
+                        <div class='success-badge'>
+                            <h2>✅ Reservation Approved!</h2>
+                        </div>
+                        
+                        <p style='font-size: 16px; line-height: 1.6; color: #333;'>
+                            Dear <strong>$name</strong>,
+                        </p>
+                        
+                        <p style='font-size: 16px; line-height: 1.6; color: #333;'>
+                            Great news! Your reservation has been <strong>approved</strong> and confirmed. We're looking forward to serving you!
+                        </p>
+                        
+                        <div class='info-box'>
+                            <h3>📋 Reservation Details</h3>
+                            <div class='info-row'>
+                                <div class='info-label'>🚗 Vehicle:</div>
+                                <div class='info-value'>$vehicle</div>
+                            </div>
+                            <div class='info-row'>
+                                <div class='info-label'>📅 Date:</div>
+                                <div class='info-value'>$date</div>
+                            </div>
+                            <div class='info-row'>
+                                <div class='info-label'>🕐 Time:</div>
+                                <div class='info-value'>$time</div>
+                            </div>
+                        </div>
+                        
+                        <p style='font-size: 14px; line-height: 1.6; color: #666; background: #FFF3E0; padding: 15px; border-radius: 5px; border-left: 4px solid #FF9800;'>
+                            <strong>⚠️ Important:</strong> Please arrive 10 minutes early. If you need to reschedule or cancel, please contact us at least 24 hours in advance.
+                        </p>
+                    </div>
+                    
+                    <div class='footer'>
+                        <p><strong>Papsi Paps Auto Repair Center</strong></p>
+                        <p>📞 Contact: [Your Phone Number]</p>
+                        <p>📧 Email: [Your Email]</p>
+                        <p style='margin-top: 20px; opacity: 0.8;'>© " . date('Y') . " Papsi Paps Auto Repair. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
             ";
-            $body_text = "Dear $name,\n\nYour reservation has been approved!\n\nReservation Details:\n- Vehicle: $vehicle\n- Date: $date\n- Time: $time\n\nWe look forward to serving you on your scheduled date and time.\n\nThank you,\nAutoRepair Center";
+            
+            $body_text = "Dear $name,\n\nYour reservation has been approved!\n\nReservation Details:\n- Vehicle: $vehicle\n- Date: $date\n- Time: $time\n\nWe look forward to serving you on your scheduled date and time.\n\nThank you,\nPapsi Paps Auto Repair Center";
 
             list($sent, $err) = sendEmail($to, $subject, $body_html, $body_text);
             if (!$sent) {
@@ -70,36 +138,137 @@ if (isset($_GET['approve'])) {
     exit();
 }
 
-// --- DECLINE Reservation ---
+// --- DECLINE Reservation (moves to declined list) ---
 if (isset($_GET['decline'])) {
     $id = intval($_GET['decline']);
 
-    $stmt = $conn->prepare("SELECT * FROM reservations WHERE id = ? AND archived = 0");
+    $stmt = $conn->prepare("
+        SELECT r.*, c.email AS customer_email, c.name AS customer_name
+        FROM reservations r
+        JOIN customers c ON r.customer_id = c.id
+        WHERE r.id = ? AND r.archived = 0
+    ");
     $stmt->bind_param("i", $id);
     $stmt->execute();
     $res = $stmt->get_result()->fetch_assoc();
 
     if ($res) {
-        $update = $conn->prepare("UPDATE reservations SET status = 'declined' WHERE id = ?");
+        // Mark as declined and archived
+        $update = $conn->prepare("UPDATE reservations SET status = 'declined', archived = 1 WHERE id = ?");
         $update->bind_param("i", $id);
         $update->execute();
 
         $desc = "Reservation #{$res['id']} for {$res['vehicle_make']} {$res['vehicle_model']} declined by admin '{$_SESSION['username']}'";
         logAudit('RESERVATION_DECLINED', $desc, $_SESSION['user_id'], $_SESSION['username']);
-        $_SESSION['notif'] = ['message' => 'Reservation declined.', 'type' => 'info'];
+        
+        // Send styled decline email
+        if (function_exists('sendEmail') && !empty($res['customer_email'])) {
+            $to = $res['customer_email'];
+            $name = htmlspecialchars($res['customer_name']);
+            $date = htmlspecialchars(date("F d, Y", strtotime($res['reservation_date'])));
+            $time = htmlspecialchars(date("g:i A", strtotime($res['reservation_time'])));
+            $vehicle = htmlspecialchars($res['vehicle_make'] . ' ' . $res['vehicle_model'] . ' (' . $res['vehicle_year'] . ')');
+            $subject = "❌ Reservation Update - Papsi Paps Auto Repair";
+            
+            $body_html = "
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset='UTF-8'>
+                <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
+                    .container { max-width: 600px; margin: 0 auto; background: white; }
+                    .header { background: linear-gradient(135deg, #DC143C, #B71C1C); padding: 40px 20px; text-align: center; }
+                    .header h1 { color: white; margin: 0; font-size: 28px; }
+                    .header p { color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px; }
+                    .content { padding: 40px 30px; }
+                    .decline-badge { background: #FFEBEE; color: #C62828; padding: 15px 20px; border-radius: 8px; text-align: center; margin-bottom: 30px; border-left: 4px solid #C62828; }
+                    .decline-badge h2 { margin: 0; color: #C62828; font-size: 24px; }
+                    .info-box { background: #f9f9f9; border-left: 4px solid #DC143C; padding: 20px; margin: 20px 0; border-radius: 4px; }
+                    .info-box h3 { margin: 0 0 15px 0; color: #333; font-size: 18px; }
+                    .info-row { display: flex; padding: 8px 0; border-bottom: 1px solid #eee; }
+                    .info-row:last-child { border-bottom: none; }
+                    .info-label { font-weight: 600; color: #666; min-width: 120px; }
+                    .info-value { color: #333; }
+                    .footer { background: #333; color: white; padding: 30px 20px; text-align: center; }
+                    .footer p { margin: 5px 0; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>🔧 Papsi Paps Auto Repair</h1>
+                        <p>Your Trusted Auto Care Partner</p>
+                    </div>
+                    
+                    <div class='content'>
+                        <div class='decline-badge'>
+                            <h2>❌ Reservation Update</h2>
+                        </div>
+                        
+                        <p style='font-size: 16px; line-height: 1.6; color: #333;'>
+                            Dear <strong>$name</strong>,
+                        </p>
+                        
+                        <p style='font-size: 16px; line-height: 1.6; color: #333;'>
+                            We regret to inform you that we are unable to confirm your reservation at this time. This may be due to scheduling conflicts or other operational constraints.
+                        </p>
+                        
+                        <div class='info-box'>
+                            <h3>📋 Reservation Details</h3>
+                            <div class='info-row'>
+                                <div class='info-label'>🚗 Vehicle:</div>
+                                <div class='info-value'>$vehicle</div>
+                            </div>
+                            <div class='info-row'>
+                                <div class='info-label'>📅 Date:</div>
+                                <div class='info-value'>$date</div>
+                            </div>
+                            <div class='info-row'>
+                                <div class='info-label'>🕐 Time:</div>
+                                <div class='info-value'>$time</div>
+                            </div>
+                        </div>
+                        
+                        <p style='font-size: 14px; line-height: 1.6; color: #666; background: #E3F2FD; padding: 15px; border-radius: 5px; border-left: 4px solid #1976D2;'>
+                            <strong>💡 Alternative Options:</strong> Please feel free to book another time slot or contact us directly to discuss alternative arrangements. We apologize for any inconvenience.
+                        </p>
+                    </div>
+                    
+                    <div class='footer'>
+                        <p><strong>Papsi Paps Auto Repair Center</strong></p>
+                        <p>📞 Contact: [Your Phone Number]</p>
+                        <p>📧 Email: [Your Email]</p>
+                        <p style='margin-top: 20px; opacity: 0.8;'>© " . date('Y') . " Papsi Paps Auto Repair. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            ";
+            
+            $body_text = "Dear $name,\n\nWe regret to inform you that we are unable to confirm your reservation at this time.\n\nReservation Details:\n- Vehicle: $vehicle\n- Date: $date\n- Time: $time\n\nPlease feel free to book another time slot or contact us directly.\n\nThank you for your understanding,\nPapsi Paps Auto Repair Center";
+
+            list($sent, $err) = sendEmail($to, $subject, $body_html, $body_text);
+            if (!$sent) {
+                error_log("Failed to send reservation decline email to $to: $err");
+            }
+        }
+        
+        $_SESSION['notif'] = ['message' => 'Reservation declined and moved to declined list.', 'type' => 'info'];
     }
 
     header("Location: manage_reservations.php");
     exit();
 }
 
-// --- FETCH Active Reservations (not completed/archived) ---
+// --- FETCH Active Reservations (not completed/archived and not declined) ---
 $reservations_stmt = $conn->prepare("
     SELECT r.id, c.name AS customer_name, r.vehicle_make, r.vehicle_model, 
            r.reservation_date, r.reservation_time, r.status, r.method
     FROM reservations r
     JOIN customers c ON r.customer_id = c.id
-    WHERE r.archived = 0
+    WHERE r.archived = 0 AND r.status != 'declined'
     ORDER BY r.reservation_date DESC, r.reservation_time DESC
 ");
 $reservations_stmt->execute();
@@ -350,6 +519,26 @@ table a:hover {
     border-left: 4px solid #1976D2;
 }
 
+.view-declined-btn {
+    background: linear-gradient(135deg, #FF5722, #E64A19);
+    color: white;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+.view-declined-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(255, 87, 34, 0.3);
+    text-decoration: none;
+    color: white;
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
     .navbar-toggle {
@@ -488,8 +677,12 @@ $color = $type === 'success' ? '#28a745' : ($type === 'info' ? '#17a2b8' : '#dc3
 <div class="container">
 <h1>Manage Pending Reservations</h1>
 
+<a href="declined_reservations.php" class="view-declined-btn">
+    <i class="fas fa-ban me-2"></i>View Declined Reservations
+</a>
+
 <div class="info-badge">
-    <strong><i class="fas fa-info-circle"></i> Info:</strong> Approving a reservation will automatically move it to the completed list. Declined reservations remain here.
+    <strong><i class="fas fa-info-circle"></i> Info:</strong> Approving a reservation will move it to completed list. Declining will move it to declined reservations where you can restore or permanently delete it.
 </div>
 
 <div class="card">
@@ -554,9 +747,6 @@ if ($reservations_result->num_rows === 0) {
             case 'confirmed':
                 echo 'background: #E3F2FD; color: #1976D2;';
                 break;
-            case 'declined':
-                echo 'background: #FFEBEE; color: #D32F2F;';
-                break;
             default:
                 echo 'background: #F5F5F5; color: #666;';
         }
@@ -566,14 +756,8 @@ if ($reservations_result->num_rows === 0) {
     </span>
 </td>
 <td data-label="Action">
-<?php 
-if ($row['status'] !== 'declined') {
-    echo '<button class="action-btn approve-btn" onclick="confirmAction(' . $row['id'] . ', \'approve\')">✅ Approve</button>';
-    echo '<button class="action-btn decline-btn" onclick="confirmAction(' . $row['id'] . ', \'decline\')">⛔ Decline</button>';
-} else {
-    echo '<span style="color:#c62828; font-weight: 600;">Declined</span>';
-}
-?>
+    <button class="action-btn approve-btn" onclick="confirmAction(<?php echo $row['id']; ?>, 'approve')">✅ Approve</button>
+    <button class="action-btn decline-btn" onclick="confirmAction(<?php echo $row['id']; ?>, 'decline')">⛔ Decline</button>
 </td>
 </tr>
 <?php 
@@ -638,12 +822,12 @@ function confirmAction(id, action){
     
     if (action === 'approve') {
         title.innerText = '✅ Approve this reservation?';
-        message.innerText = 'This will move the reservation to completed and notify the customer.';
+        message.innerText = 'This will move the reservation to completed and notify the customer via email.';
         yesBtn.innerText = 'Approve';
         yesBtn.style.background = '#2e7d32';
     } else if (action === 'decline') {
         title.innerText = '⛔ Decline this reservation?';
-        message.innerText = 'This reservation will be marked as declined.';
+        message.innerText = 'This will move the reservation to declined list and notify the customer via email.';
         yesBtn.innerText = 'Decline';
         yesBtn.style.background = '#c62828';
     }
