@@ -370,10 +370,7 @@ $topActions = array_slice($audit_stats['by_action'] ?? [], 0, 5);
         <li><a href="manage_payments.php">Payments</a></li>
         <li><a href="manage_services.php">Manage Services</a></li>
         <li><a href="manage_reservations.php">Reservations</a></li>
-        <?php if ($_SESSION['role'] === 'staff'): ?>
-            <li><a href="staff_report">Report</a></li>
-        <?php endif; ?>
-        <?php if ($_SESSION['role'] === 'superadmin'): ?>
+       <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
         <li><a href="#" onclick="openLogoutModal()">Logout</a></li>
