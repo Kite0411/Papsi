@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Fetch all services
-$services = mysqli_query($conn, "SELECT * FROM services");
+$services = mysqli_query($conn, "SELECT * FROM services WHERE is_archived = 0");
 
 $message = '';
 $messageType = '';
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $reservation_date = $_POST['reservation_date'];
     $reservation_time = $_POST['reservation_time'];
     $selected_services = $_POST['services'] ?? [];
-    $method = sanitizeInput($_POST['method'] ?? 'Walk-In');
+    $method = 'Walk-In'; // Always Walk-In for this page
 
     if (
         empty($name) || empty($phone) || empty($email) || empty($vehicle_make) ||
@@ -58,16 +58,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Compute end_time
             $end_time = date("H:i:s", strtotime($reservation_time) + ($total_duration * 60));
 
-            // Insert reservation with method and set status as 'pending_verification'
+            // ✅ WALK-IN AUTO-APPROVAL: Set status to 'approved' and archived to 1 (completed)
+            $status = 'approved';
+            $archived = 1;
+            
             $stmt2 = $conn->prepare("
                 INSERT INTO reservations 
-                (customer_id, vehicle_make, vehicle_model, vehicle_year, reservation_date, reservation_time, end_time, method, status) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (customer_id, vehicle_make, vehicle_model, vehicle_year, reservation_date, reservation_time, end_time, method, status, archived) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            // Set default status as 'pending_verification'
-            $status = 'pending_verification';
-            $stmt2->bind_param("issssssss", $customer_id, $vehicle_make, $vehicle_model, $vehicle_year, $reservation_date, $reservation_time, $end_time, $method, $status);
+            $stmt2->bind_param("isssssssi", $customer_id, $vehicle_make, $vehicle_model, $vehicle_year, $reservation_date, $reservation_time, $end_time, $method, $status, $archived);
 
             if ($stmt2->execute()) {
                 $reservation_id = $conn->insert_id;
@@ -79,21 +80,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt3->execute();
                 }
 
-                // Log description for audit trail
-                $desc = "Walk-in reservation added by " . $_SESSION['username'] . 
+                // Log audit trail
+                $desc = "Walk-in reservation added and automatically completed by " . $_SESSION['username'] . 
                         " for customer: $name ($vehicle_make $vehicle_model, $vehicle_year)";
+                logAudit('WALKIN_ADDED', $desc, $_SESSION['user_id'], $_SESSION['username']);
 
-                // Redirect or message depending on method
-                if ($method === 'Online') {
-                    $_SESSION['reservation_id'] = $reservation_id;
-                    $_SESSION['customer_id'] = $customer_id;
-                    header("Location: payment.php?reservation_id=" . $reservation_id);
-                    exit();
-                } else {
-                    $message = "✅ Walk-in reservation successfully saved!";
-                    $messageType = 'success';
-                    logAudit('WALKIN_ADDED', $desc, $_SESSION['user_id'], $_SESSION['username']);
-                }
+                $message = "✅ Walk-in reservation successfully saved and marked as completed!";
+                $messageType = 'success';
 
             } else {
                 $message = "Error creating reservation.";
@@ -113,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Reservation - AutoFix</title>
+    <title>Walk-In Booking - AutoFix Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="../assets/css/admin-mobile-responsive.css">
@@ -124,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     body {
         background: var(--light-gray);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        padding-top: 80px; /* FIXED - Changed from padding: 30px 0 */
+        padding-top: 80px;
         padding-bottom: 30px;
         margin: 0;
     }
@@ -137,11 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         padding: 15px 30px;
         align-items: center;
         border-bottom: 3px solid var(--primary-red);
-        position: fixed; /* FIXED - Changed from relative */
-        top: 0; /* ADDED */
-        left: 0; /* ADDED */
-        right: 0; /* ADDED */
-        z-index: 1000; /* ADDED */
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
     }
     
     .navbar .logo {
@@ -150,7 +143,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         font-weight: 800;
     }
     
-    /* Mobile toggle button */
     .navbar-toggle {
         display: none;
         background: var(--primary-red);
@@ -238,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         border: 2px solid #e0e0e0;
         transition: var(--transition-fast);
         padding: 12px 15px;
-        font-size: 16px; /* Prevents iOS zoom */
+        font-size: 16px;
     }
     
     .form-control:focus {
@@ -311,6 +303,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         padding: 15px 20px;
     }
     
+    .info-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        border-radius: var(--radius-md);
+        margin-bottom: 25px;
+        text-align: center;
+    }
+    
+    .info-banner strong {
+        display: block;
+        font-size: 1.1rem;
+        margin-bottom: 5px;
+    }
+    
     /* Mobile responsiveness */
     @media (max-width: 768px) {
         .navbar-toggle {
@@ -322,7 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         body {
-            padding-top: 70px; /* ADJUSTED for mobile navbar height */
+            padding-top: 70px;
         }
         
         .form-header {
@@ -390,6 +397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <li><a href="manage_services.php">Manage Services</a></li>
         <?php endif; ?>
         <li><a href="manage_reservations.php">Reservations</a></li>
+        <li><a href="completed_reservations.php">Completed</a></li>
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
@@ -400,10 +408,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="container py-5 mt-5">
     <div class="row justify-content-center">
         <div class="col-lg-8">
+            <div class="info-banner">
+                <strong><i class="fas fa-walking"></i> Walk-In Booking</strong>
+                <p>Walk-in bookings are automatically approved and marked as completed upon submission.</p>
+            </div>
+            
             <div class="reservation-form">
                 <div class="form-header">
-                    <h2>🚗 Book Your Auto Service</h2>
-                    <p>Schedule your appointment with AutoFix - Professional service guaranteed</p>
+                    <h2>🚗 Walk-In Service Booking</h2>
+                    <p>Quick registration for walk-in customers</p>
                 </div>
                 
                 <div class="form-body">
@@ -451,9 +464,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         
                         <div class="row mt-4">
                             <div class="col-md-6">
-                                <h5 class="mb-3">Appointment Details</h5>
+                                <h5 class="mb-3">Service Details</h5>
                                 <div class="mb-3">
-                                    <label class="form-label">Preferred Date</label>
+                                    <label class="form-label">Service Date</label>
                                     <input 
                                         type="text" 
                                         id="reservation_date"
@@ -464,7 +477,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         required>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Preferred Time</label>
+                                    <label class="form-label">Service Time</label>
                                     <select 
                                         name="reservation_time" 
                                         id="reservation_time"
@@ -477,7 +490,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <div class="col-md-6">
                                 <h5 class="mb-3">Select Services</h5>
-                                <?php while ($service = mysqli_fetch_assoc($services)) { ?>
+                                <?php 
+                                mysqli_data_seek($services, 0); // Reset pointer
+                                while ($service = mysqli_fetch_assoc($services)) { ?>
                                     <div class="service-card" onclick="toggleService(<?php echo $service['id']; ?>)">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" name="services[]" value="<?php echo $service['id']; ?>" id="service_<?php echo $service['id']; ?>">
@@ -496,7 +511,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         
                         <div class="text-center mt-4">
-                            <button type="submit" class="btn btn-primary btn-lg">Book Appointment</button>
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-check-circle me-2"></i>Complete Walk-In Booking
+                            </button>
                         </div>
                     </form>
                 </div>
