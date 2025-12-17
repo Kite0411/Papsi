@@ -329,10 +329,10 @@ def is_reservation_query(message):
 PROBLEM_CATEGORIES = {
     'brake': {
         'keywords': [
-            'brake', 'brakes', 'braking', 'stop', 'stopping', 'pedal', 'squeak', 'squeal',
-            'grind', 'grinding', 'soft', 'spongy', 'hard', 'stiff', 'vibration',
-            'pulsing', 'pulse', 'abs', 'brake light', 'parking brake', 'not working',
-            'failing', 'failed', 'no brake', 'cant stop', "can't stop"
+            'brake', 'brakes', 'braking', 'stop', 'stopping', 'brake pedal', 
+            'squeak', 'squeal', 'grind', 'grinding', 'soft brake', 'spongy brake', 
+            'hard brake', 'stiff brake', 'brake vibration', 'brake pulsing', 
+            'abs', 'brake light', 'parking brake', 'cant stop', "can't stop"
         ],
         'exact_services': [],  # No brake service in your database
         'priority': 1
@@ -343,7 +343,7 @@ PROBLEM_CATEGORIES = {
             'rough', 'jerky', 'hesitation', 'misfire', 'backfire', 'smoke', 'exhaust',
             'check engine', 'knocking', 'rattling', 'ticking', 'overheating', 'overheat',
             'temperature', 'coolant', 'radiator', 'shaking', 'vibrating', 'loss of power',
-            'weak', 'no power'
+            'weak', 'no power', 'engine noise'
         ],
         'exact_services': ['Engine Tune Up'],
         'priority': 1
@@ -360,18 +360,19 @@ PROBLEM_CATEGORIES = {
     'aircon': {
         'keywords': [
             'ac', 'aircon', 'air con', 'air conditioning', 'cool', 'cooling', 'cold',
-            'hot', 'warm', 'not cold', 'not cooling', 'no cold', 'weak airflow',
-            'refrigerant', 'freon', 'compressor', 'blower', 'vent', 'heat', 'heating'
+            'hot air', 'warm air', 'not cold', 'not cooling', 'no cold', 'weak airflow',
+            'refrigerant', 'freon', 'compressor', 'blower', 'vent', 'ac not working',
+            'aircon not working', 'no aircon'
         ],
         'exact_services': ['Aircon Cleaning'],
         'priority': 1
     },
     'electrical': {
         'keywords': [
-            'electrical', 'battery', 'dead', "won't start", "wont start", 'no start',
+            'electrical', 'battery', 'dead battery', "won't start", "wont start", 'no start',
             'crank', 'alternator', 'charging', 'voltage', 'fuse', 'relay', 'wiring',
             'spark plug', 'ignition', 'starter', 'lights', 'radio', 'power window',
-            'wiper', 'not starting'
+            'wiper', 'electrical problem'
         ],
         'exact_services': ['Electrical'],
         'priority': 1
@@ -395,7 +396,7 @@ PROBLEM_CATEGORIES = {
     'wash': {
         'keywords': [
             'wash', 'clean', 'cleaning', 'dirty', 'under', 'undercarriage', 'mud',
-            'dirt', 'debris', 'underwash'
+            'dirt', 'debris', 'underwash', 'underbody'
         ],
         'exact_services': ['Under Wash'],
         'priority': 3
@@ -404,40 +405,56 @@ PROBLEM_CATEGORIES = {
 
 def diagnose_problem(user_message):
     """
-    Accurately diagnose vehicle problem with strict matching
+    Accurately diagnose vehicle problem with SMART matching
+    Prioritizes specific keywords over generic ones
     """
     message_lower = user_message.lower()
     
     diagnoses = []
     
+    # Generic keywords that appear in multiple categories
+    generic_keywords = ['not working', 'problem', 'issue', 'broken', 'failing', 'failed']
+    
     # Check each category
     for category, data in PROBLEM_CATEGORIES.items():
         matched_keywords = []
+        specific_matches = []
+        generic_matches = []
         
         # Look for exact keyword matches
         for keyword in data['keywords']:
             if keyword in message_lower:
                 matched_keywords.append(keyword)
+                
+                # Separate specific vs generic matches
+                if keyword in generic_keywords:
+                    generic_matches.append(keyword)
+                else:
+                    specific_matches.append(keyword)
         
-        # If we found matches, calculate confidence
-        if matched_keywords:
-            # Higher score for more specific matches
-            score = len(matched_keywords) * 10
-            confidence = min(95, score * 5)  # Cap at 95%
+        # Only count if we have SPECIFIC matches (not just generic ones)
+        if specific_matches:
+            # Score heavily favors specific matches
+            specific_score = len(specific_matches) * 20
+            generic_score = len(generic_matches) * 2
+            total_score = specific_score + generic_score
+            
+            confidence = min(95, total_score)
             
             diagnoses.append({
                 'category': category,
                 'confidence': confidence,
                 'matched_keywords': matched_keywords,
+                'specific_matches': specific_matches,
                 'priority': data['priority']
             })
     
-    # Sort by confidence and priority
+    # Sort by confidence (which now heavily favors specific matches)
     diagnoses.sort(key=lambda x: (x['confidence'], -x['priority']), reverse=True)
     
     if diagnoses:
         print(f"🔍 Diagnosis: {diagnoses[0]['category']} ({diagnoses[0]['confidence']}% confident)")
-        print(f"   Matched keywords: {diagnoses[0]['matched_keywords']}")
+        print(f"   Specific matches: {diagnoses[0]['specific_matches']}")
     
     return diagnoses
 
