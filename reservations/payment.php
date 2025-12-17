@@ -65,9 +65,7 @@ if ($result->num_rows > 0) {
 }
 $stmt->close();
 
-$vehicle_make = $data['vehicle_make'];
-$vehicle_model = $data['vehicle_model'];
-$vehicle_year = $data['vehicle_year'];
+$vehicles = $data['vehicles'] ?? [];
 $reservation_date = $data['reservation_date'];
 
 $message = '';
@@ -90,56 +88,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_payment'])) {
             $path = $upload_dir . $payment_proof;
             move_uploaded_file($_FILES['payment_proof']['tmp_name'], $path);
 
-            // 🧾 Insert reservation (✅ with end_time)
-            $stmt = $conn->prepare("
-                INSERT INTO reservations 
-                (customer_id, vehicle_make, vehicle_model, vehicle_year, reservation_date, reservation_time, end_time, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_verification')
-            ");
-            $stmt->bind_param(
-                "issssss",
-                $customer_id,
-                $vehicle_make,
-                $vehicle_model,
-                $vehicle_year,
-                $reservation_date,
-                $reservation_time,
-                $end_time
-            );
-            $stmt->execute();
-            $reservation_id = $conn->insert_id;
-            $stmt->close();
-
-            if ($reservation_id) {
-
-                // 💡 Insert selected services
-                if (!empty($selected_services)) {
-                    $stmt2 = $conn->prepare("INSERT INTO reservation_services (reservation_id, service_id) VALUES (?, ?)");
-                    foreach ($selected_services as $sid) {
-                        $stmt2->bind_param("ii", $reservation_id, $sid);
-                        $stmt2->execute();
+            // 🧾 Insert reservation for EACH vehicle
+            $reservation_ids = [];
+            
+            foreach ($vehicles as $index => $vehicle) {
+                $vehicle_make = $vehicle['make'];
+                $vehicle_model = $vehicle['model'];
+                $vehicle_year = $vehicle['year'];
+                
+                $stmt = $conn->prepare("
+                    INSERT INTO reservations 
+                    (customer_id, vehicle_make, vehicle_model, vehicle_year, reservation_date, reservation_time, end_time, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_verification')
+                ");
+                $stmt->bind_param(
+                    "issssss",
+                    $customer_id,
+                    $vehicle_make,
+                    $vehicle_model,
+                    $vehicle_year,
+                    $reservation_date,
+                    $reservation_time,
+                    $end_time
+                );
+                $stmt->execute();
+                $reservation_id = $conn->insert_id;
+                $stmt->close();
+                
+                if ($reservation_id) {
+                    $reservation_ids[] = $reservation_id;
+                    
+                    // 💡 Insert selected services for this reservation
+                    if (!empty($selected_services)) {
+                        $stmt2 = $conn->prepare("INSERT INTO reservation_services (reservation_id, service_id) VALUES (?, ?)");
+                        foreach ($selected_services as $sid) {
+                            $stmt2->bind_param("ii", $reservation_id, $sid);
+                            $stmt2->execute();
+                        }
+                        $stmt2->close();
                     }
-                    $stmt2->close();
+                } else {
+                    debugLog("Reservation insert failed for vehicle " . ($index + 1) . ": " . $conn->error);
                 }
+            }
 
-                // 💰 Insert payment
+            if (!empty($reservation_ids)) {
+                // 💰 Insert payment for the first reservation (or create a separate payment logic)
+                // For simplicity, we'll link the payment to the first reservation
+                $main_reservation_id = $reservation_ids[0];
+                
                 $stmt3 = $conn->prepare("
                     INSERT INTO payments (reservation_id, account_name, amount_paid, payment_proof, payment_status)
                     VALUES (?, ?, ?, ?, 'pending')
                 ");
-                $stmt3->bind_param("isds", $reservation_id, $account_name, $amount_paid, $payment_proof);
+                $stmt3->bind_param("isds", $main_reservation_id, $account_name, $amount_paid, $payment_proof);
                 $stmt3->execute();
                 $stmt3->close();
 
                 unset($_SESSION['reservation_data'], $_SESSION['selected_services'], $_SESSION['total_amount']);
 
-                $message = "✅ Payment submitted successfully! Your reservation is pending verification.";
+                $vehicle_count = count($reservation_ids);
+                $message = "✅ Payment submitted successfully! Your reservation for {$vehicle_count} vehicle(s) is pending verification.";
                 $messageType = 'success';
 
             } else {
                 $message = "❌ Failed to create reservation. Please try again.";
                 $messageType = 'danger';
-                debugLog("Reservation insert failed: " . $conn->error);
             }
         } else {
             $message = "Invalid file type. Please upload JPG, PNG, or GIF.";
@@ -379,6 +393,14 @@ if (isset($_POST['cancel_payment'])) {
             border: none;
             padding: 15px 20px;
         }
+
+        .vehicle-item {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border-left: 3px solid var(--primary-red);
+        }
     </style>
 </head>
 <body>
@@ -405,9 +427,6 @@ if (isset($_POST['cancel_payment'])) {
                     <p><strong>Phone:</strong> <?= htmlspecialchars($data['phone'] ?? '') ?></p>
                 </div>
                 <div class="col-md-6">
-                    <p><strong>Vehicle:</strong>
-                        <?= htmlspecialchars(($data['vehicle_make'] ?? '') . ' ' . ($data['vehicle_model'] ?? '') . ' (' . ($data['vehicle_year'] ?? '') . ')') ?>
-                    </p>
                     <p><strong>Date:</strong>
                         <?= !empty($data['reservation_date']) ? date('F d, Y', strtotime($data['reservation_date'])) : '' ?>
                     </p>
@@ -417,6 +436,19 @@ if (isset($_POST['cancel_payment'])) {
                 </div>
             </div>
 
+                <h5 class="mt-3">🚗 Vehicles (<?= count($vehicles) ?>):</h5>
+                <?php if (!empty($vehicles)): ?>
+                    <?php foreach ($vehicles as $index => $vehicle): ?>
+                        <div class="vehicle-item">
+                            <strong>Vehicle #<?= $index + 1 ?>:</strong>
+                            <?= htmlspecialchars($vehicle['make']) ?> 
+                            <?= htmlspecialchars($vehicle['model']) ?> 
+                            (<?= htmlspecialchars($vehicle['year']) ?>)
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <p>No vehicles found.</p>
+                <?php endif; ?>
                 
                 <h5 class="mt-3">Selected Services:</h5>
                 <ul>
