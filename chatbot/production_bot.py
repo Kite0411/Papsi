@@ -502,7 +502,10 @@ def preprocess_text(text):
     return text
 
 def smart_faq_search(user_message, faq_data):
-    """Smart FAQ search"""
+    """
+    Smart FAQ search with STRICT matching to prevent wrong answers
+    Only returns high-confidence matches
+    """
     user_clean = preprocess_text(user_message)
     user_words = set(user_clean.split())
     user_words = {word for word in user_words if len(word) > 2}
@@ -520,22 +523,37 @@ def smart_faq_search(user_message, faq_data):
         question_clean = preprocess_text(question)
         
         question_words = set(question_clean.split())
+        question_words = {word for word in question_words if len(word) > 2}
+        
+        if not question_words:
+            continue
+        
+        # Calculate word overlap
         common_words = user_words.intersection(question_words)
         
         if not common_words:
             continue
-            
-        score = len(common_words) / len(user_words)
         
-        if user_clean in question_clean:
-            score += 1.0
+        # Score based on:
+        # 1. Percentage of user words matched
+        # 2. Percentage of question words matched
+        user_coverage = len(common_words) / len(user_words)
+        question_coverage = len(common_words) / len(question_words)
         
-        if score > best_score and score > 0.08:
+        # Average of both coverages
+        score = (user_coverage + question_coverage) / 2
+        
+        # Bonus for exact phrase match
+        if user_clean in question_clean or question_clean in user_clean:
+            score += 0.3
+        
+        # STRICT: Need high overlap to be confident
+        if score > best_score:
             best_score = score
             best_match = answer
             best_question = question
     
-    if best_match:
+    if best_match and best_score > 0.3:  # Minimum 30% match
         print(f"🎯 FAQ match: '{best_question}' (score: {best_score:.3f})")
     
     return best_match, best_score
@@ -716,19 +734,28 @@ def chat():
                 'admin_answered': True
             })
         
-        # 3️⃣ Check FAQ (DISABLED for now - was giving wrong answers)
+        # 3️⃣ Check FAQ with STRICT matching
         faq_reply = None
-        # Commenting out FAQ search since it's matching incorrectly
-        # try:
-        #     if FAQ_FILE.exists():
-        #         faq_data = pd.read_csv(FAQ_FILE)
-        #         faq_data = faq_data.dropna(subset=['question', 'answer'])
-        #         faq_reply, score = smart_faq_search(user_message, faq_data)
-        #         if faq_reply:
-        #             greeting = f"Hi {customer_name}! " if customer_name else ""
-        #             reply_parts.append(f"{greeting}💡 {faq_reply}")
-        # except Exception as e:
-        #     print(f"⚠️ FAQ error: {e}")
+        try:
+            if FAQ_FILE.exists():
+                faq_data = pd.read_csv(FAQ_FILE)
+                faq_data = faq_data.dropna(subset=['question', 'answer'])
+                
+                # Only use FAQ if we have a HIGH confidence match
+                faq_reply, score = smart_faq_search(user_message, faq_data)
+                
+                # STRICT threshold: Only use FAQ if match score is very high
+                if faq_reply and score > 0.5:  # Need 50%+ match
+                    greeting = f"Hi {customer_name}! " if customer_name else ""
+                    reply_parts.append(f"{greeting}💡 {faq_reply}")
+                    print(f"✅ FAQ match used (score: {score:.2f})")
+                else:
+                    faq_reply = None  # Reject low-confidence matches
+                    if score > 0:
+                        print(f"❌ FAQ match rejected (score too low: {score:.2f})")
+                    
+        except Exception as e:
+            print(f"⚠️ FAQ error: {e}")
 
         # 4️⃣ Diagnose problem and recommend services
         try:
