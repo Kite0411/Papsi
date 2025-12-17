@@ -22,14 +22,15 @@ if (isset($_POST['verify_payment'])) {
 
     if ($stmt->execute()) {
 
-        // --- Fetch payment + customer info ---
+        // --- Fetch payment + customer info + booking group info ---
         $stmt2 = $conn->prepare("
             SELECT 
                 p.reservation_id,
                 c.email AS customer_email,
                 c.name AS customer_name,
                 r.reservation_date,
-                r.reservation_time
+                r.reservation_time,
+                r.customer_id
             FROM payments p
             JOIN reservations r ON p.reservation_id = r.id
             JOIN customers c ON r.customer_id = c.id
@@ -40,11 +41,25 @@ if (isset($_POST['verify_payment'])) {
         $result = $stmt2->get_result();
         $payment = $result->fetch_assoc();
 
-        // --- If verified, confirm reservation ---
+        // --- If verified, confirm ALL reservations in the booking group ---
         if ($action === 'verified' && $payment) {
-            $update_reservation = $conn->prepare("UPDATE reservations SET status = 'confirmed' WHERE id = ?");
-            $update_reservation->bind_param("i", $payment['reservation_id']);
+            // Update ALL vehicles in the same booking (same customer, date, time)
+            $update_reservation = $conn->prepare("
+                UPDATE reservations 
+                SET status = 'confirmed' 
+                WHERE customer_id = ? 
+                AND reservation_date = ? 
+                AND reservation_time = ?
+            ");
+            $update_reservation->bind_param("iss", 
+                $payment['customer_id'], 
+                $payment['reservation_date'], 
+                $payment['reservation_time']
+            );
             $update_reservation->execute();
+            
+            // Get count of vehicles updated
+            $vehicles_updated = $update_reservation->affected_rows;
 
             // --- Send email notification ---
             if (function_exists('sendEmail')) {
@@ -52,14 +67,17 @@ if (isset($_POST['verify_payment'])) {
                 $name = htmlspecialchars($payment['customer_name']);
                 $date = htmlspecialchars($payment['reservation_date']);
                 $time = htmlspecialchars($payment['reservation_time']);
+                
+                $vehicle_text = $vehicles_updated > 1 ? "$vehicles_updated vehicles" : "your vehicle";
+                
                 $subject = "Payment Verified - Reservation Confirmed";
                 $body_html = "
                     <p>Dear <b>$name</b>,</p>
-                    <p>Your payment for your reservation on <b>$date</b> at <b>$time</b> has been <b>verified</b>.</p>
+                    <p>Your payment for <b>$vehicle_text</b> on <b>$date</b> at <b>$time</b> has been <b>verified</b>.</p>
                     <p>Your reservation is now <b>confirmed</b>. We look forward to serving you!</p>
                     <p>Thank you,<br><b>AutoRepair Center</b></p>
                 ";
-                $body_text = "Dear $name,\n\nYour payment for your reservation on $date at $time has been verified.\nYour reservation is now confirmed.\n\nThank you,\nAutoRepair Center";
+                $body_text = "Dear $name,\n\nYour payment for $vehicle_text on $date at $time has been verified.\nYour reservation is now confirmed.\n\nThank you,\nAutoRepair Center";
 
                 list($sent, $err) = sendEmail($to, $subject, $body_html, $body_text);
                 if (!$sent) {
@@ -68,17 +86,25 @@ if (isset($_POST['verify_payment'])) {
             } else {
                 error_log("sendEmail() function not found — unable to notify customer.");
             }
+            
+            // --- Clean readable audit trail entry ---
+            $vehicle_desc = $vehicles_updated > 1 ? " ($vehicles_updated vehicles)" : "";
+            $desc = "Admin '$admin_username' verified payment #$payment_id$vehicle_desc.";
+            logAudit('PAYMENT_VERIFIED', $desc, $admin_id, $admin_username);
+            
+            $_SESSION['notif'] = [
+                'message' => "Payment verified! All $vehicles_updated vehicle(s) confirmed.",
+                'type' => 'success'
+            ];
+        } elseif ($action === 'rejected') {
+            $desc = "Admin '$admin_username' rejected payment #$payment_id.";
+            logAudit('PAYMENT_REJECTED', $desc, $admin_id, $admin_username);
+            
+            $_SESSION['notif'] = [
+                'message' => "Payment rejected.",
+                'type' => 'error'
+            ];
         }
-
-        // --- Clean readable audit trail entry ---
-        $desc = "Admin '$admin_username' " . ($action === 'verified' ? "verified" : "rejected") . " payment #$payment_id.";
-        logAudit('PAYMENT_' . strtoupper($action), $desc, $admin_id, $admin_username);
-
-        // --- Success message ---
-        $_SESSION['notif'] = [
-            'message' => "Payment " . ($action === 'verified' ? 'verified' : 'rejected') . " successfully!",
-            'type' => $action === 'verified' ? 'success' : 'error'
-        ];
     } else {
         $_SESSION['notif'] = [
             'message' => "Error updating payment status.",
@@ -422,6 +448,7 @@ $payments = mysqli_query($conn, $query);
             <li><a href="manage_services.php">Manage Services</a></li>
         <?php endif; ?>
         <li><a href="manage_reservations.php">Reservations</a></li>
+        <li><a href="completed_reservations.php">Completed</a></li>
         <?php if ($_SESSION['role'] === 'superadmin'): ?>
             <li><a href="audit_trail.php">Audit Trail</a></li>
         <?php endif; ?>
@@ -546,6 +573,10 @@ $payments = mysqli_query($conn, $query);
                                 <input type="hidden" name="payment_id" value="<?php echo $payment['id']; ?>">
                                 <input type="hidden" name="action" value="verified">
                                 <p>Are you sure you want to verify this payment?</p>
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Note:</strong> If this is a multi-vehicle booking, ALL vehicles will be confirmed.
+                                </div>
                                 <div class="mb-3">
                                     <label class="form-label">Notes (Optional)</label>
                                     <textarea name="notes" class="form-control" rows="3" style="font-size: 16px;"></textarea>
@@ -596,7 +627,7 @@ $payments = mysqli_query($conn, $query);
 
 <?php include "logout-modal.php" ?>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.js"></script>
 <script>
 // Mobile navbar toggle
 function toggleNav() {
