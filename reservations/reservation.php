@@ -29,17 +29,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = sanitizeInput($_POST['name']);
     $phone = sanitizeInput($_POST['phone']);
     $email = sanitizeInput($_POST['email']);
-    $vehicle_make = sanitizeInput($_POST['vehicle_make']);
-    $vehicle_model = sanitizeInput($_POST['vehicle_model']);
-    $vehicle_year = sanitizeInput($_POST['vehicle_year']);
+    
+    // Handle multiple vehicles
+    $vehicle_makes = $_POST['vehicle_make'] ?? [];
+    $vehicle_models = $_POST['vehicle_model'] ?? [];
+    $vehicle_years = $_POST['vehicle_year'] ?? [];
+    
     $reservation_date = $_POST['reservation_date'];
     $reservation_time = $_POST['reservation_time'];
     $selected_services = $_POST['services'] ?? [];
 
     if (
         empty($name) || empty($phone) || empty($email) || 
-        empty($vehicle_make) || empty($vehicle_model) || 
-        empty($vehicle_year) || empty($reservation_date) || 
+        empty($vehicle_makes) || empty($vehicle_models) || 
+        empty($vehicle_years) || empty($reservation_date) || 
         empty($reservation_time) || empty($selected_services)
     ) {
         $message = "All fields are required.";
@@ -48,41 +51,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = "Please enter a valid email address.";
         $messageType = 'danger';
     } else {
-        // Store reservation details temporarily in session
-        $_SESSION['reservation_data'] = [
-            'name' => $name,
-            'email' => $email,
-            'phone' => $phone,
-            'vehicle_make' => $vehicle_make,
-            'vehicle_model' => $vehicle_model,
-            'vehicle_year' => $vehicle_year,
-            'reservation_date' => $reservation_date,
-            'reservation_time' => $reservation_time
-        ];
-
-        // Store selected service IDs
-        $_SESSION['selected_services'] = $selected_services;
-
-        // Compute total amount for display
-        $total_amount = 0;
-        if (!empty($selected_services)) {
-            $placeholders = implode(',', array_fill(0, count($selected_services), '?'));
-            $types = str_repeat('i', count($selected_services));
-            $stmt = $conn->prepare("SELECT price FROM services WHERE id IN ($placeholders)");
-            $stmt->bind_param($types, ...$selected_services);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            while ($row = $result->fetch_assoc()) {
-                $total_amount += $row['price'];
+        // Build vehicles array
+        $vehicles = [];
+        for ($i = 0; $i < count($vehicle_makes); $i++) {
+            if (!empty($vehicle_makes[$i]) && !empty($vehicle_models[$i]) && !empty($vehicle_years[$i])) {
+                $vehicles[] = [
+                    'make' => sanitizeInput($vehicle_makes[$i]),
+                    'model' => sanitizeInput($vehicle_models[$i]),
+                    'year' => sanitizeInput($vehicle_years[$i])
+                ];
             }
-            $stmt->close();
         }
+        
+        if (empty($vehicles)) {
+            $message = "Please add at least one vehicle.";
+            $messageType = 'danger';
+        } else {
+            // Store reservation details temporarily in session
+            $_SESSION['reservation_data'] = [
+                'name' => $name,
+                'email' => $email,
+                'phone' => $phone,
+                'vehicles' => $vehicles, // Store all vehicles
+                'reservation_date' => $reservation_date,
+                'reservation_time' => $reservation_time
+            ];
 
-        $_SESSION['total_amount'] = $total_amount;
+            // Store selected service IDs
+            $_SESSION['selected_services'] = $selected_services;
 
-        // Redirect to payment page
-        header("Location: payment.php");
-        exit();
+            // Compute total amount for display
+            $total_amount = 0;
+            if (!empty($selected_services)) {
+                $placeholders = implode(',', array_fill(0, count($selected_services), '?'));
+                $types = str_repeat('i', count($selected_services));
+                $stmt = $conn->prepare("SELECT price FROM services WHERE id IN ($placeholders)");
+                $stmt->bind_param($types, ...$selected_services);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                while ($row = $result->fetch_assoc()) {
+                    $total_amount += $row['price'];
+                }
+                $stmt->close();
+            }
+
+            $_SESSION['total_amount'] = $total_amount;
+
+            // Redirect to payment page
+            header("Location: payment.php");
+            exit();
+        }
     }
 }
 
@@ -267,6 +285,19 @@ $services = mysqli_query($conn, "SELECT * FROM services");
             min-width: 40px;
         }
 
+        .vehicle-group {
+            background: #f8f9fa;
+            position: relative;
+        }
+
+        .vehicle-group .btn-remove-vehicle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            font-size: 0.85rem;
+        }
+
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             body {
@@ -399,18 +430,28 @@ $services = mysqli_query($conn, "SELECT * FROM services");
                                 
                                 <div class="col-md-6">
                                     <h5 class="mb-3">Vehicle Information</h5>
-                                    <div class="mb-3">
-                                        <label class="form-label">Vehicle Make</label>
-                                        <input type="text" name="vehicle_make" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_make'] ?? ''); ?>" required>
+                                    <div id="vehiclesContainer">
+                                        <div class="vehicle-group mb-3 p-3 border rounded">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <strong>Vehicle #1</strong>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Vehicle Make</label>
+                                                <input type="text" name="vehicle_make[]" class="form-control" placeholder="e.g., Toyota" required>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Vehicle Model</label>
+                                                <input type="text" name="vehicle_model[]" class="form-control" placeholder="e.g., Camry" required>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label">Vehicle Year</label>
+                                                <input type="text" name="vehicle_year[]" class="form-control" placeholder="e.g., 2020" required>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Vehicle Model</label>
-                                        <input type="text" name="vehicle_model" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_model'] ?? ''); ?>" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Vehicle Year</label>
-                                        <input type="text" name="vehicle_year" class="form-control" value="<?php echo htmlspecialchars($_POST['vehicle_year'] ?? ''); ?>" required>
-                                    </div>
+                                    <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="addVehicle()">
+                                        <i class="fa-solid fa-plus"></i> Add Another Vehicle
+                                    </button>
                                 </div>
                             </div>
                             
@@ -494,6 +535,48 @@ $services = mysqli_query($conn, "SELECT * FROM services");
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        let vehicleCount = 1;
+
+        function addVehicle() {
+            vehicleCount++;
+            const container = document.getElementById('vehiclesContainer');
+            const newVehicle = document.createElement('div');
+            newVehicle.className = 'vehicle-group mb-3 p-3 border rounded';
+            newVehicle.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong>Vehicle #${vehicleCount}</strong>
+                    <button type="button" class="btn btn-danger btn-sm btn-remove-vehicle" onclick="removeVehicle(this)">
+                        <i class="fa-solid fa-trash"></i> Remove
+                    </button>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Vehicle Make</label>
+                    <input type="text" name="vehicle_make[]" class="form-control" placeholder="e.g., Honda" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Vehicle Model</label>
+                    <input type="text" name="vehicle_model[]" class="form-control" placeholder="e.g., Civic" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Vehicle Year</label>
+                    <input type="text" name="vehicle_year[]" class="form-control" placeholder="e.g., 2021" required>
+                </div>
+            `;
+            container.appendChild(newVehicle);
+        }
+
+        function removeVehicle(button) {
+            const vehicleGroup = button.closest('.vehicle-group');
+            vehicleGroup.remove();
+            
+            // Renumber remaining vehicles
+            const vehicles = document.querySelectorAll('.vehicle-group');
+            vehicles.forEach((vehicle, index) => {
+                vehicle.querySelector('strong').textContent = `Vehicle #${index + 1}`;
+            });
+            vehicleCount = vehicles.length;
+        }
+
         function toggleService(serviceId) {
             const checkbox = document.getElementById('service_' + serviceId);
             const card = checkbox.closest('.service-card');
