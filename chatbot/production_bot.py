@@ -334,7 +334,7 @@ PROBLEM_CATEGORIES = {
             'pulsing', 'pulse', 'abs', 'brake light', 'parking brake', 'not working',
             'failing', 'failed', 'no brake', 'cant stop', "can't stop"
         ],
-        'service_match': ['brake', 'body repair'],  # Exact service name matches
+        'exact_services': [],  # No brake service in your database
         'priority': 1
     },
     'engine': {
@@ -345,7 +345,7 @@ PROBLEM_CATEGORIES = {
             'temperature', 'coolant', 'radiator', 'shaking', 'vibrating', 'loss of power',
             'weak', 'no power'
         ],
-        'service_match': ['tune up', 'engine'],
+        'exact_services': ['Engine Tune Up'],
         'priority': 1
     },
     'oil': {
@@ -354,16 +354,16 @@ PROBLEM_CATEGORIES = {
             'black oil', 'oil leak', 'leaking oil', 'oil level', 'oil pressure',
             'oil light', 'maintenance', 'service due', 'lube'
         ],
-        'service_match': ['change oil', 'oil'],
+        'exact_services': ['Change Oil'],
         'priority': 1
     },
     'aircon': {
         'keywords': [
             'ac', 'aircon', 'air con', 'air conditioning', 'cool', 'cooling', 'cold',
             'hot', 'warm', 'not cold', 'not cooling', 'no cold', 'weak airflow',
-            'refrigerant', 'freon', 'compressor', 'blower', 'vent'
+            'refrigerant', 'freon', 'compressor', 'blower', 'vent', 'heat', 'heating'
         ],
-        'service_match': ['aircon', 'cleaning'],
+        'exact_services': ['Aircon Cleaning'],
         'priority': 1
     },
     'electrical': {
@@ -371,17 +371,17 @@ PROBLEM_CATEGORIES = {
             'electrical', 'battery', 'dead', "won't start", "wont start", 'no start',
             'crank', 'alternator', 'charging', 'voltage', 'fuse', 'relay', 'wiring',
             'spark plug', 'ignition', 'starter', 'lights', 'radio', 'power window',
-            'wiper', 'not working'
+            'wiper', 'not starting'
         ],
-        'service_match': ['electrical'],
+        'exact_services': ['Electrical'],
         'priority': 1
     },
     'body': {
         'keywords': [
             'body', 'panel', 'dent', 'scratch', 'damage', 'collision', 'accident',
-            'bumper', 'fender', 'door', 'hood', 'trunk', 'rust', 'paint damage'
+            'bumper', 'fender', 'door', 'hood', 'trunk', 'rust', 'bent'
         ],
-        'service_match': ['body repair', 'painting'],
+        'exact_services': ['Auto Body Repair'],
         'priority': 2
     },
     'painting': {
@@ -389,15 +389,15 @@ PROBLEM_CATEGORIES = {
             'paint', 'painting', 'repaint', 'color', 'fade', 'faded', 'peeling',
             'clear coat', 'spray', 'auto paint'
         ],
-        'service_match': ['painting'],
+        'exact_services': ['Auto Painting'],
         'priority': 2
     },
     'wash': {
         'keywords': [
             'wash', 'clean', 'cleaning', 'dirty', 'under', 'undercarriage', 'mud',
-            'dirt', 'debris'
+            'dirt', 'debris', 'underwash'
         ],
-        'service_match': ['wash', 'cleaning'],
+        'exact_services': ['Under Wash'],
         'priority': 3
     }
 }
@@ -437,13 +437,13 @@ def diagnose_problem(user_message):
     
     if diagnoses:
         print(f"🔍 Diagnosis: {diagnoses[0]['category']} ({diagnoses[0]['confidence']}% confident)")
-        print(f"   Matched: {diagnoses[0]['matched_keywords']}")
+        print(f"   Matched keywords: {diagnoses[0]['matched_keywords']}")
     
     return diagnoses
 
 def match_services_to_problem(diagnoses, services):
     """
-    Match services to diagnosed problems with STRICT accuracy
+    Match services to diagnosed problems using EXACT service names
     """
     if not diagnoses:
         return []
@@ -454,24 +454,25 @@ def match_services_to_problem(diagnoses, services):
     top_diagnosis = diagnoses[0]
     category = top_diagnosis['category']
     category_data = PROBLEM_CATEGORIES[category]
-    service_patterns = category_data['service_match']
+    exact_service_names = category_data['exact_services']
     
-    print(f"🔎 Looking for services matching: {service_patterns}")
+    print(f"🔎 Looking for exact services: {exact_service_names}")
     
-    # Find services that match this specific problem
+    # Find services that EXACTLY match the service names
     for service in services:
-        service_name_lower = service['service_name'].lower()
+        service_name = service['service_name']
         
-        # Check if service name contains any of the match patterns
-        for pattern in service_patterns:
-            if pattern in service_name_lower:
-                score = top_diagnosis['confidence']
-                matched_services.append((service, score, category))
-                print(f"   ✅ Matched: {service['service_name']}")
-                break
+        # Check if this service name is in our exact list
+        if service_name in exact_service_names:
+            score = top_diagnosis['confidence']
+            matched_services.append((service, score, category))
+            print(f"   ✅ Matched: {service['service_name']}")
     
-    # Return only matched services (no random ones)
-    return matched_services[:3]  # Max 3 services
+    # If no exact matches found, tell user we don't have that service
+    if not matched_services:
+        print(f"   ⚠️ No services found for {category} problem")
+    
+    return matched_services
 
 # ==================== TEXT PROCESSING ====================
 
@@ -734,6 +735,28 @@ def chat():
                         reply_parts.append(part)
                     
                     reply_parts.append("\n💬 Would you like to schedule an appointment?")
+                else:
+                    # Problem identified but no service available
+                    problem_category = diagnoses[0]['category']
+                    greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
+                    
+                    problem_names = {
+                        'brake': 'brake',
+                        'engine': 'engine',
+                        'oil': 'oil change',
+                        'aircon': 'air conditioning',
+                        'electrical': 'electrical',
+                        'body': 'body repair',
+                        'painting': 'painting',
+                        'wash': 'car wash'
+                    }
+                    
+                    problem_name = problem_names.get(problem_category, problem_category)
+                    reply_parts.append(
+                        f"{greeting}I understand you're having {problem_name} issues. "
+                        f"Unfortunately, we don't currently have a specific {problem_name} service in our system. "
+                        f"Please call us at our shop for assistance with this issue."
+                    )
                 
         except Exception as e:
             print(f"⚠️ Service matching error: {e}")
