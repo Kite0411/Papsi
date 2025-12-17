@@ -327,152 +327,151 @@ def is_reservation_query(message):
 # ==================== PROBLEM DIAGNOSIS SYSTEM ====================
 
 PROBLEM_CATEGORIES = {
+    'brake': {
+        'keywords': [
+            'brake', 'brakes', 'braking', 'stop', 'stopping', 'pedal', 'squeak', 'squeal',
+            'grind', 'grinding', 'soft', 'spongy', 'hard', 'stiff', 'vibration',
+            'pulsing', 'pulse', 'abs', 'brake light', 'parking brake', 'not working',
+            'failing', 'failed', 'no brake', 'cant stop', "can't stop"
+        ],
+        'service_match': ['brake', 'body repair'],  # Exact service name matches
+        'priority': 1
+    },
     'engine': {
         'keywords': [
             'engine', 'motor', 'power', 'acceleration', 'rpm', 'rev', 'idle', 'stall',
             'rough', 'jerky', 'hesitation', 'misfire', 'backfire', 'smoke', 'exhaust',
-            'check engine', 'cel', 'light on', 'knocking', 'rattling', 'ticking',
-            'overheating', 'overheat', 'temperature', 'coolant', 'radiator',
-            'shaking', 'vibrating', 'loss of power', 'weak acceleration'
+            'check engine', 'knocking', 'rattling', 'ticking', 'overheating', 'overheat',
+            'temperature', 'coolant', 'radiator', 'shaking', 'vibrating', 'loss of power',
+            'weak', 'no power'
         ],
-        'service_keywords': ['engine', 'diagnostic', 'tune', 'repair'],
+        'service_match': ['tune up', 'engine'],
         'priority': 1
-    },
-    'brake': {
-        'keywords': [
-            'brake', 'braking', 'stop', 'stopping', 'pedal', 'squeak', 'squeal',
-            'grind', 'grinding', 'soft', 'spongy', 'hard', 'stiff', 'vibration',
-            'pulsing', 'pulse', 'abs', 'anti-lock', 'brake light', 'parking brake'
-        ],
-        'service_keywords': ['brake', 'pad', 'rotor', 'caliper'],
-        'priority': 1
-    },
-    'air_conditioning': {
-        'keywords': [
-            'ac', 'air con', 'aircon', 'air conditioning', 'cool', 'cooling', 'cold',
-            'hot', 'warm', 'temperature', 'climate', 'vent', 'blower', 'fan',
-            'refrigerant', 'freon', 'condenser', 'compressor', 'not cold',
-            'not cooling', 'no cold air', 'weak airflow'
-        ],
-        'service_keywords': ['air conditioning', 'ac', 'climate', 'cooling'],
-        'priority': 2
     },
     'oil': {
         'keywords': [
-            'oil', 'oil change', 'lubricant', 'filter', 'dirty oil', 'black oil',
-            'oil leak', 'leaking oil', 'burning oil', 'oil consumption', 'oil level',
-            'oil pressure', 'oil light', 'maintenance', 'service due'
+            'oil', 'oil change', 'change oil', 'lubricant', 'filter', 'dirty oil', 
+            'black oil', 'oil leak', 'leaking oil', 'oil level', 'oil pressure',
+            'oil light', 'maintenance', 'service due', 'lube'
         ],
-        'service_keywords': ['oil', 'change', 'lubrication'],
-        'priority': 2
+        'service_match': ['change oil', 'oil'],
+        'priority': 1
+    },
+    'aircon': {
+        'keywords': [
+            'ac', 'aircon', 'air con', 'air conditioning', 'cool', 'cooling', 'cold',
+            'hot', 'warm', 'not cold', 'not cooling', 'no cold', 'weak airflow',
+            'refrigerant', 'freon', 'compressor', 'blower', 'vent'
+        ],
+        'service_match': ['aircon', 'cleaning'],
+        'priority': 1
     },
     'electrical': {
         'keywords': [
-            'electrical', 'battery', 'dead', 'won\'t start', 'wont start', 'no start',
-            'crank', 'cranking', 'alternator', 'charging', 'voltage', 'fuse',
-            'relay', 'wiring', 'spark plug', 'ignition', 'starter', 'lights',
-            'radio', 'power window', 'key fob'
+            'electrical', 'battery', 'dead', "won't start", "wont start", 'no start',
+            'crank', 'alternator', 'charging', 'voltage', 'fuse', 'relay', 'wiring',
+            'spark plug', 'ignition', 'starter', 'lights', 'radio', 'power window',
+            'wiper', 'not working'
         ],
-        'service_keywords': ['electrical', 'battery', 'alternator', 'starter', 'diagnostic'],
+        'service_match': ['electrical'],
         'priority': 1
     },
-    'transmission': {
+    'body': {
         'keywords': [
-            'transmission', 'trans', 'gear', 'shift', 'shifting', 'clutch',
-            'automatic', 'manual', 'neutral', 'reverse', 'slipping', 'jerking',
-            'delay', 'hard shift', 'won\'t shift', 'transmission fluid'
+            'body', 'panel', 'dent', 'scratch', 'damage', 'collision', 'accident',
+            'bumper', 'fender', 'door', 'hood', 'trunk', 'rust', 'paint damage'
         ],
-        'service_keywords': ['transmission', 'gear', 'clutch'],
-        'priority': 1
-    },
-    'suspension': {
-        'keywords': [
-            'suspension', 'shock', 'strut', 'spring', 'bounce', 'bumpy',
-            'rough ride', 'handling', 'steering', 'wheel alignment', 'vibration',
-            'shake', 'clunk', 'rattle', 'noise when turning'
-        ],
-        'service_keywords': ['suspension', 'shock', 'strut', 'alignment', 'wheel'],
+        'service_match': ['body repair', 'painting'],
         'priority': 2
     },
-    'tire': {
+    'painting': {
         'keywords': [
-            'tire', 'tyre', 'wheel', 'flat', 'puncture', 'pressure', 'tpms',
-            'balance', 'rotation', 'alignment', 'uneven wear', 'wobble'
+            'paint', 'painting', 'repaint', 'color', 'fade', 'faded', 'peeling',
+            'clear coat', 'spray', 'auto paint'
         ],
-        'service_keywords': ['tire', 'wheel', 'alignment', 'balance', 'rotation'],
+        'service_match': ['painting'],
         'priority': 2
+    },
+    'wash': {
+        'keywords': [
+            'wash', 'clean', 'cleaning', 'dirty', 'under', 'undercarriage', 'mud',
+            'dirt', 'debris'
+        ],
+        'service_match': ['wash', 'cleaning'],
+        'priority': 3
     }
 }
 
 def diagnose_problem(user_message):
-    """Accurately diagnose vehicle problem"""
+    """
+    Accurately diagnose vehicle problem with strict matching
+    """
     message_lower = user_message.lower()
-    message_words = set(re.findall(r'\b\w+\b', message_lower))
     
     diagnoses = []
     
+    # Check each category
     for category, data in PROBLEM_CATEGORIES.items():
-        score = 0
         matched_keywords = []
         
+        # Look for exact keyword matches
         for keyword in data['keywords']:
-            keyword_words = keyword.split()
-            
             if keyword in message_lower:
-                score += 3.0
                 matched_keywords.append(keyword)
-            elif any(word in message_words for word in keyword_words):
-                score += 1.0
         
-        if score > 0:
-            confidence = score / len(data['keywords']) * 100
+        # If we found matches, calculate confidence
+        if matched_keywords:
+            # Higher score for more specific matches
+            score = len(matched_keywords) * 10
+            confidence = min(95, score * 5)  # Cap at 95%
+            
             diagnoses.append({
                 'category': category,
                 'confidence': confidence,
-                'score': score,
-                'priority': data['priority'],
-                'matched_keywords': matched_keywords
+                'matched_keywords': matched_keywords,
+                'priority': data['priority']
             })
     
-    diagnoses.sort(key=lambda x: (x['score'], x['priority']), reverse=True)
+    # Sort by confidence and priority
+    diagnoses.sort(key=lambda x: (x['confidence'], -x['priority']), reverse=True)
+    
+    if diagnoses:
+        print(f"🔍 Diagnosis: {diagnoses[0]['category']} ({diagnoses[0]['confidence']}% confident)")
+        print(f"   Matched: {diagnoses[0]['matched_keywords']}")
+    
     return diagnoses
 
 def match_services_to_problem(diagnoses, services):
-    """Match services to diagnosed problems"""
+    """
+    Match services to diagnosed problems with STRICT accuracy
+    """
     if not diagnoses:
         return []
     
     matched_services = []
     
-    for diagnosis in diagnoses[:3]:
-        category = diagnosis['category']
-        category_data = PROBLEM_CATEGORIES[category]
-        service_keywords = category_data['service_keywords']
+    # Only use the TOP diagnosis (most confident)
+    top_diagnosis = diagnoses[0]
+    category = top_diagnosis['category']
+    category_data = PROBLEM_CATEGORIES[category]
+    service_patterns = category_data['service_match']
+    
+    print(f"🔎 Looking for services matching: {service_patterns}")
+    
+    # Find services that match this specific problem
+    for service in services:
+        service_name_lower = service['service_name'].lower()
         
-        for service in services:
-            score = 0
-            service_name = service['service_name'].lower()
-            service_desc = service['description'].lower()
-            
-            for keyword in service_keywords:
-                if keyword in service_name:
-                    score += 5.0
-                elif keyword in service_desc:
-                    score += 2.0
-            
-            if score > 0:
-                final_score = score * (diagnosis['confidence'] / 100)
-                matched_services.append((service, final_score, category))
+        # Check if service name contains any of the match patterns
+        for pattern in service_patterns:
+            if pattern in service_name_lower:
+                score = top_diagnosis['confidence']
+                matched_services.append((service, score, category))
+                print(f"   ✅ Matched: {service['service_name']}")
+                break
     
-    seen = set()
-    unique_services = []
-    for service, score, category in sorted(matched_services, key=lambda x: x[1], reverse=True):
-        service_id = service['service_name']
-        if service_id not in seen:
-            seen.add(service_id)
-            unique_services.append((service, score, category))
-    
-    return unique_services[:3]
+    # Return only matched services (no random ones)
+    return matched_services[:3]  # Max 3 services
 
 # ==================== TEXT PROCESSING ====================
 
@@ -699,21 +698,19 @@ def chat():
                 'admin_answered': True
             })
         
-        # 3️⃣ Check FAQ
+        # 3️⃣ Check FAQ (DISABLED for now - was giving wrong answers)
         faq_reply = None
-        try:
-            if FAQ_FILE.exists():
-                faq_data = pd.read_csv(FAQ_FILE)
-                faq_data = faq_data.dropna(subset=['question', 'answer'])
-                
-                faq_reply, score = smart_faq_search(user_message, faq_data)
-                
-                if faq_reply:
-                    greeting = f"Hi {customer_name}! " if customer_name else ""
-                    reply_parts.append(f"{greeting}💡 {faq_reply}")
-                    
-        except Exception as e:
-            print(f"⚠️ FAQ error: {e}")
+        # Commenting out FAQ search since it's matching incorrectly
+        # try:
+        #     if FAQ_FILE.exists():
+        #         faq_data = pd.read_csv(FAQ_FILE)
+        #         faq_data = faq_data.dropna(subset=['question', 'answer'])
+        #         faq_reply, score = smart_faq_search(user_message, faq_data)
+        #         if faq_reply:
+        #             greeting = f"Hi {customer_name}! " if customer_name else ""
+        #             reply_parts.append(f"{greeting}💡 {faq_reply}")
+        # except Exception as e:
+        #     print(f"⚠️ FAQ error: {e}")
 
         # 4️⃣ Diagnose problem and recommend services
         try:
