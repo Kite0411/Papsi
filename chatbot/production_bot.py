@@ -154,7 +154,7 @@ def get_customer_details(customer_id):
 
 def get_customer_reservations(customer_id):
     """
-    Get all reservations for a specific customer
+    Get all reservations for a specific customer with their services
     """
     try:
         conn = get_db_connection()
@@ -163,6 +163,7 @@ def get_customer_reservations(customer_id):
         
         cursor = conn.cursor(dictionary=True)
         
+        # Get all reservations for this customer
         query = """
             SELECT 
                 r.id,
@@ -183,6 +184,28 @@ def get_customer_reservations(customer_id):
         
         cursor.execute(query, (customer_id,))
         reservations = cursor.fetchall()
+        
+        # Get services for each reservation
+        for reservation in reservations:
+            reservation_id = reservation['id']
+            
+            service_query = """
+                SELECT s.service_name, s.price
+                FROM reservation_services rs
+                JOIN services s ON rs.service_id = s.id
+                WHERE rs.reservation_id = %s
+            """
+            
+            cursor.execute(service_query, (reservation_id,))
+            services = cursor.fetchall()
+            
+            # Format services as a comma-separated string
+            if services:
+                service_names = [f"{svc['service_name']} (₱{float(svc['price']):,.0f})" for svc in services]
+                reservation['services'] = ", ".join(service_names)
+            else:
+                reservation['services'] = "No services listed"
+        
         cursor.close()
         conn.close()
         
@@ -197,6 +220,7 @@ def get_customer_reservations(customer_id):
 def format_reservation_response(reservations, customer_name=None):
     """
     Format reservation data into readable response
+    Shows ALL reservations, not just 3
     """
     if not reservations:
         greeting = f"Hi {customer_name}! " if customer_name else ""
@@ -230,34 +254,41 @@ def format_reservation_response(reservations, customer_name=None):
     
     response = f"{greeting}Here are your reservations:\n\n"
     
-    # Show upcoming first
+    # Show ALL upcoming appointments
     if upcoming:
-        response += "📅 **UPCOMING APPOINTMENTS:**\n"
-        for res in upcoming[:3]:
+        response += "📅 UPCOMING APPOINTMENTS:\n"
+        for res in upcoming:  # Show ALL, not just [:3]
             response += format_single_reservation(res) + "\n"
     
-    # Show pending
+    # Show ALL pending
     if pending:
-        response += "\n⏳ **PENDING CONFIRMATION:**\n"
-        for res in pending[:2]:
+        response += "\n⏳ PENDING CONFIRMATION:\n"
+        for res in pending:  # Show ALL, not just [:2]
             response += format_single_reservation(res) + "\n"
     
-    # Show recent completed
-    if completed and not upcoming:
-        response += "\n✅ **RECENT SERVICES:**\n"
-        for res in completed[:2]:
+    # Show ALL completed
+    if completed:
+        response += "\n✅ COMPLETED SERVICES:\n"
+        for res in completed:  # Show ALL
+            response += format_single_reservation(res) + "\n"
+    
+    # Show ALL cancelled
+    if cancelled:
+        response += "\n❌ CANCELLED:\n"
+        for res in cancelled:  # Show ALL
             response += format_single_reservation(res) + "\n"
     
     return response.strip()
 
 def format_single_reservation(res):
-    """Format a single reservation"""
+    """Format a single reservation with services"""
     res_date = res['reservation_date']
     if isinstance(res_date, str):
         res_date = datetime.strptime(res_date, '%Y-%m-%d').date()
     
     date_str = res_date.strftime('%B %d, %Y')
     time_str = str(res['reservation_time'])[:5] if res['reservation_time'] else 'N/A'
+    end_time_str = str(res['end_time'])[:5] if res['end_time'] else 'N/A'
     
     status_emoji = {
         'Pending': '⏳',
@@ -266,11 +297,16 @@ def format_single_reservation(res):
         'Cancelled': '❌'
     }.get(res['status'], '📌')
     
-    text = f"  {status_emoji} **Reservation #{res['id']}** - {res['status']}\n"
-    text += f"     📅 {date_str} at {time_str}\n"
+    text = f"  {status_emoji} Reservation #{res['id']} - {res['status']}\n"
+    text += f"     📅 {date_str}\n"
+    text += f"     🕐 {time_str} - {end_time_str}\n"
     
     if res['vehicle_make']:
         text += f"     🚗 {res['vehicle_year']} {res['vehicle_make']} {res['vehicle_model']}\n"
+    
+    # Get services for this reservation
+    if 'services' in res and res['services']:
+        text += f"     🔧 Services: {res['services']}\n"
     
     return text
 
@@ -659,7 +695,7 @@ def chat():
         if recent_answer:
             greeting = f"Hi {customer_name}! " if customer_name else ""
             return jsonify({
-                'reply': f"{greeting}✅ **Admin Response:**\n\n{recent_answer}",
+                'reply': f"{greeting}✅ Admin Response:\n\n{recent_answer}",
                 'admin_answered': True
             })
         
@@ -689,11 +725,11 @@ def chat():
                 
                 if matched_services:
                     greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
-                    reply_parts.append(f"{greeting}🔧 **Based on your problem, I recommend:**\n")
+                    reply_parts.append(f"{greeting}🔧 Based on your problem, I recommend:\n")
                     
                     for service, score, category in matched_services:
                         part = (
-                            f"**• {service['service_name']}**\n"
+                            f"• {service['service_name']}\n"
                             f"  📝 {service['description']}\n"
                             f"  🕒 Duration: {service['duration']}\n"
                             f"  💰 Price: ₱{float(service['price']):,.2f}\n"
