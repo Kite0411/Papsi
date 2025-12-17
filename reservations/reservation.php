@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Store selected service IDs
             $_SESSION['selected_services'] = $selected_services;
 
-            // Compute total amount for display
+            // ✅ CORRECTED: Compute total amount WITH vehicle count multiplier
             $total_amount = 0;
             if (!empty($selected_services)) {
                 $placeholders = implode(',', array_fill(0, count($selected_services), '?'));
@@ -89,13 +89,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->bind_param($types, ...$selected_services);
                 $stmt->execute();
                 $result = $stmt->get_result();
+                
+                // Calculate base service cost
+                $base_service_cost = 0;
                 while ($row = $result->fetch_assoc()) {
-                    $total_amount += $row['price'];
+                    $base_service_cost += $row['price'];
                 }
                 $stmt->close();
+                
+                // ✅ MULTIPLY by number of vehicles
+                $vehicle_count = count($vehicles);
+                $total_amount = $base_service_cost * $vehicle_count;
             }
 
             $_SESSION['total_amount'] = $total_amount;
+            $_SESSION['vehicle_count'] = count($vehicles); // Store for reference
 
             // Redirect to payment page
             header("Location: payment.php");
