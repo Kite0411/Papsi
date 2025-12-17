@@ -156,15 +156,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_payment'])) {
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden;
+            border: 1px solid rgba(184, 97, 97, 0.86);
         }
         .payment-header {
             background: linear-gradient(135deg, #DC143C, #B71C1C);
             color: white;
             padding: 40px 30px;
             text-align: center;
+            position: relative;
+        }
+        .payment-header::after {
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 20px solid #B71C1C;
+        }
+        .payment-header h2 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            color: white;
+        }
+        .payment-header p {
+            margin: 0;
+            opacity: 0.95;
+            font-size: 1.1rem;
+            color: white;
         }
         .payment-body {
-            padding: 40px 30px;
+            padding: 50px 40px 40px;
         }
         .vehicle-service-breakdown {
             background: #f8f9fa;
@@ -187,6 +213,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_payment'])) {
             border-radius: 10px;
             text-align: center;
             margin: 25px 0;
+            box-shadow: 0 4px 12px rgba(220, 20, 60, 0.3);
+        }
+        .qr-placeholder {
+            background: #FFEBEE;
+            border: 3px dashed #DC143C;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+        .qr-placeholder:hover {
+            border-color: #B71C1C;
+            box-shadow: 0 4px 12px rgba(220, 20, 60, 0.2);
+        }
+        .qr-placeholder h4 {
+            color: #DC143C;
+            font-weight: 700;
+        }
+        .instruction-box {
+            background: #FFF3E0;
+            border-left: 4px solid #FF9800;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+        .instruction-box h5 {
+            color: #E65100;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+        .instruction-box ol {
+            margin-bottom: 0;
+        }
+        .upload-area {
+            border: 3px dashed #DC143C;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #FFEBEE;
+        }
+        .upload-area:hover {
+            background: white;
+            border-color: #B71C1C;
+            box-shadow: 0 4px 12px rgba(220, 20, 60, 0.2);
+        }
+        .upload-area.dragover {
+            background: white;
+            border-color: #B71C1C;
+            box-shadow: 0 6px 16px rgba(220, 20, 60, 0.3);
+        }
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .form-control {
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s ease;
+            padding: 12px 15px;
+            font-size: 16px;
+        }
+        .form-control:focus {
+            border-color: #DC143C;
+            box-shadow: 0 0 0 3px rgba(220, 20, 60, 0.1);
+        }
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .btn-submit {
+            background: linear-gradient(135deg, #DC143C, #B71C1C);
+            border: none;
+            padding: 15px 50px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            letter-spacing: 0.5px;
+            color: white;
+        }
+        .btn-submit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(220, 20, 60, 0.4);
+        }
+        .btn-secondary {
+            padding: 15px 30px;
+            font-weight: 600;
+            border-radius: 8px;
+        }
+        .alert {
+            border-radius: 8px;
+            border: none;
+            padding: 15px 20px;
+        }
+        h5 {
+            color: #DC143C;
+            font-weight: 700;
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -244,27 +375,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_payment'])) {
                 Grand Total: ₱<?php echo number_format($grand_total, 2); ?>
             </div>
 
-            <!-- Payment Form -->
-            <form method="post" enctype="multipart/form-data">
-                <h5>📤 Upload Payment Proof</h5>
-                <input type="file" name="payment_proof" class="form-control mb-3" accept="image/*" required>
-                
-                <div class="row">
-                    <div class="col-md-6">
-                        <label class="form-label">GCash Account Name</label>
-                        <input type="text" name="account_name" class="form-control" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Amount Paid</label>
-                        <input type="number" name="amount_paid" class="form-control" step="0.01" value="<?php echo $grand_total; ?>" required>
+            <!-- Payment Instructions -->
+            <div class="instruction-box">
+                <h5>📱 Payment Instructions:</h5>
+                <ol>
+                    <li>Scan the QR code below using your GCash app</li>
+                    <li>Send the exact amount: <strong>₱<?php echo number_format($grand_total, 2); ?></strong></li>
+                    <li>Take a screenshot of the payment confirmation</li>
+                    <li>Upload the screenshot below</li>
+                    <li>Fill in your GCash account name and amount paid</li>
+                </ol>
+            </div>
+
+            <!-- QR Code Placeholder -->
+            <div class="qr-placeholder">
+                <h4>📱 GCash QR Code</h4>
+                <p class="text-muted">Scan this QR code with your GCash app</p>
+                <div style="background: white; padding: 20px; display: inline-block; border-radius: 10px; margin: 20px 0;">
+                    <div style="width: 200px; height: 200px; background: #e0e0e0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+                        <span style="font-size: 14px; color: #666;">QR Code Placeholder<br>(Will be replaced with actual QR)</span>
                     </div>
                 </div>
+                <p class="mt-3"><strong>Note:</strong> The actual GCash QR code will be displayed here</p>
+            </div>
+
+            <!-- Payment Form -->
+            <form method="post" enctype="multipart/form-data" id="paymentForm">
+                <h5 class="mt-4">📤 Upload Payment Proof</h5>
                 
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" name="payment_proof" id="payment_proof" accept="image/*" style="display: none;">
+                    <div id="uploadText">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="#DC143C" viewBox="0 0 16 16">
+                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+                        </svg>
+                        <p class="mt-3"><strong>Click to upload</strong> or drag and drop</p>
+                        <p class="text-muted">PNG, JPG, GIF up to 10MB</p>
+                    </div>
+                    <img id="imagePreview" class="preview-image" style="display: none;">
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <label class="form-label"><strong>GCash Account Name</strong></label>
+                        <input type="text" name="account_name" class="form-control" placeholder="Enter your GCash account name" required>
+                        <small class="text-muted">Enter the name registered on your GCash account</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label"><strong>Amount Paid</strong></label>
+                        <input type="number" name="amount_paid" class="form-control" step="0.01" value="<?php echo $grand_total; ?>" placeholder="Enter amount paid" required>
+                        <small class="text-muted">Enter the exact amount you sent via GCash</small>
+                    </div>
+                </div>
+
                 <div class="text-center mt-4">
-                    <button type="submit" name="submit_payment" class="btn btn-primary">Submit Payment</button>
+                    <button type="submit" name="submit_payment" class="btn btn-primary btn-submit">Submit Payment</button>
+                    <a href="../index.php" class="btn btn-secondary ms-2">Cancel</a>
                 </div>
             </form>
         </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('payment_proof');
+        const imagePreview = document.getElementById('imagePreview');
+        const uploadText = document.getElementById('uploadText');
+
+        // Click to upload
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            fileInput.files = e.dataTransfer.files;
+            handleFile(file);
+        });
+
+        function handleFile(file) {
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                    uploadText.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Form validation
+        document.getElementById('paymentForm').addEventListener('submit', (e) => {
+            if (!fileInput.files.length) {
+                e.preventDefault();
+                alert('Please upload payment proof screenshot');
+            }
+        });
+
+        // Auto-redirect after success
+        document.addEventListener('DOMContentLoaded', function () {
+            const alertBox = document.querySelector('.alert');
+            if (alertBox) {
+                let seconds = 5;
+                const countdown = document.createElement('small');
+                countdown.classList.add('text-muted', 'ms-2');
+                countdown.innerHTML = `(Redirecting in ${seconds}s...)`;
+                alertBox.appendChild(countdown);
+
+                const timer = setInterval(() => {
+                    seconds--;
+                    countdown.innerHTML = `(Redirecting in ${seconds}s...)`;
+                    if (seconds <= 0) {
+                        clearInterval(timer);
+                        const bsAlert = new bootstrap.Alert(alertBox);
+                        bsAlert.close();
+
+                        setTimeout(() => {
+                            window.location.href = "../index.php";
+                        }, 500);
+                    }
+                }, 1000);
+            }
+        });
+    </script>
 </body>
 </html>
