@@ -432,10 +432,10 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 
 <div class="container">
 <div class="card">
-<h1>🚫 Declined Reservations</h1>
+<h1>🚫 Cancelled Reservations</h1>
 
 <div class="info-badge">
-    <strong><i class="fas fa-exclamation-triangle"></i> Info:</strong> These reservations have been declined. You can restore them back to pending status or permanently delete them.
+    <strong><i class="fas fa-exclamation-triangle"></i> Info:</strong> These reservations have been Canceled. You can restore them back to pending status or permanently delete them.
 </div>
 
 <table>
@@ -457,7 +457,7 @@ $color = $type === 'success' ? '#28a745' : '#dc3545';
 if ($declined_result->num_rows === 0) {
     echo '<tr><td colspan="8" style="text-align:center; padding: 40px;">
             <i class="fas fa-inbox fa-3x" style="color: #ccc; margin-bottom: 15px;"></i>
-            <p style="color: #999; font-size: 1.1rem;">No declined reservations.</p>
+            <p style="color: #999; font-size: 1.1rem;">No canceled reservations.</p>
           </td></tr>';
 } else {
     while ($row = $declined_result->fetch_assoc()):
@@ -488,7 +488,7 @@ if ($declined_result->num_rows === 0) {
 <td data-label="Time"><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
 <td data-label="Status">
     <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; background: #FFEBEE; color: #C62828; display: inline-block;">
-        ⛔ Declined
+        ⛔ Canceled
     </span>
 </td>
 <td data-label="Action">
