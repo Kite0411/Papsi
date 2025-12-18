@@ -488,7 +488,7 @@ if ($completed_result->num_rows === 0) {
 <td data-label="Time"><?php echo date("g:i A", strtotime($row['reservation_time'])); ?></td>
 <td data-label="Status">
     <span style="padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 700; background: #E8F5E9; color: #2E7D32; display: inline-block;">
-        ✅ Approved
+        Complete
     </span>
 </td>
 <td data-label="Action">
