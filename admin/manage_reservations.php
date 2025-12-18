@@ -48,7 +48,7 @@ if (isset($_GET['approve_group'])) {
         logAudit('RESERVATION_APPROVED', $desc, $_SESSION['user_id'], $_SESSION['username']);
         
         $_SESSION['notif'] = [
-            'message' => "✅ Approved booking for {$vehicle_count} vehicle(s)!",
+            'message' => "✅ Complete booking for {$vehicle_count} vehicle(s)!",
             'type' => 'success'
         ];
     }
@@ -596,7 +596,7 @@ if ($reservations_result->num_rows === 0) {
 <td data-label="Action">
     <button class="action-btn approve-btn" 
             onclick="confirmAction(<?php echo $row['customer_id']; ?>, '<?php echo $row['reservation_date']; ?>', '<?php echo $row['reservation_time']; ?>', 'approve', <?php echo $vehicle_count; ?>)">
-         Complete <?php echo $vehicle_count > 1 ? "All" : ""; ?>
+         Complete <?php echo $vehicle_count > 1 ? "" : ""; ?>
     </button>
     <button class="action-btn decline-btn" 
             onclick="confirmAction(<?php echo $row['customer_id']; ?>, '<?php echo $row['reservation_date']; ?>', '<?php echo $row['reservation_time']; ?>', 'decline', <?php echo $vehicle_count; ?>)">
