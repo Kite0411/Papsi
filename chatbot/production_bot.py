@@ -758,7 +758,6 @@ def chat():
                         )
                         reply_parts.append(part)
                     
-                    reply_parts.append("\n💬 Would you like to schedule an appointment?")
                 else:
                     problem_category = diagnoses[0]['category']
                     greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
