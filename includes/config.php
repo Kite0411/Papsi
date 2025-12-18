@@ -1,19 +1,20 @@
 <?php
 // AutoFix Configuration File
 // Centralized settings for the application
+// Updated for papsipaps.online hosting - December 18, 2025
 
-// Database Configuration
+// ========== DATABASE CONFIGURATION (UPDATED) ==========
 define('DB_HOST', 'localhost');
-define('DB_USERNAME', 'u563434200_papsipaps');
-define('DB_PASSWORD', 'u563434200_@A');
-define('DB_NAME', 'u563434200_papsipaps');
+define('DB_USERNAME', 'u929029793_papsipaps');
+define('DB_PASSWORD', 'u929029793_@A');
+define('DB_NAME', 'u929029793_papsipaps');
 
-// AI Configuration
+// ========== AI CONFIGURATION ==========
 define('HUGGING_FACE_TOKEN', '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');
 define('AI_MODEL_URL', 'https://api-inference.huggingface.co/models/gpt2');
 define('AI_TIMEOUT', 10);
 
-// Chatbot Configuration
+// ========== CHATBOT CONFIGURATION ==========
 define('CHATBOT_NAME', 'AutoFix Assistant');
 define('CHATBOT_WELCOME_MESSAGE', 'Hi! How can I help you with your car today?');
 define('CHATBOT_SIMILARITY_THRESHOLD', 4);
@@ -30,29 +31,29 @@ define('FALLBACK_RESPONSES', [
     "Need help with your car? I can assist with reservations, service information, and general auto repair questions."
 ]);
 
-// Application Settings
+// ========== APPLICATION SETTINGS (UPDATED) ==========
 define('APP_NAME', 'Papsi Repair Shop');
 define('APP_VERSION', '2.0.0');
-define('APP_URL', 'https://goldenrod-quetzal-768639.hostingersite.com');
+define('APP_URL', 'https://papsipaps.online');  // ✅ UPDATED - New domain
 
-// Security Settings
+// ========== SECURITY SETTINGS ==========
 define('SESSION_TIMEOUT', 3600); // 1 hour
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('PASSWORD_MIN_LENGTH', 8);
 
-// File Upload Settings
+// ========== FILE UPLOAD SETTINGS ==========
 define('UPLOAD_MAX_SIZE', 5 * 1024 * 1024); // 5MB
 define('ALLOWED_IMAGE_TYPES', ['jpg', 'jpeg', 'png', 'gif']);
 define('UPLOAD_PATH', 'uploads/');
 
-// Email Settings
+// ========== EMAIL SETTINGS ==========
 define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 587);
 define('SMTP_USERNAME', 'ritzkarldelaisla@gmail.com');
 define('SMTP_PASSWORD', 'exgxsyfsmbsqrldd');
 define('EMAIL_DEV_MODE', false);
 
-// Error Reporting
+// ========== ERROR REPORTING ==========
 define('DEBUG_MODE', true);
 if (DEBUG_MODE) {
     error_reporting(E_ALL);
@@ -62,10 +63,10 @@ if (DEBUG_MODE) {
     ini_set('display_errors', 0);
 }
 
-// Timezone
+// ========== TIMEZONE ==========
 date_default_timezone_set('Asia/Manila');
 
-// Helper Functions
+// ========== HELPER FUNCTIONS ==========
 function getFallbackResponse() {
     $responses = FALLBACK_RESPONSES;
     return $responses[array_rand($responses)];
