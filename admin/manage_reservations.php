@@ -523,7 +523,7 @@ $color = $type === 'success' ? '#28a745' : ($type === 'info' ? '#17a2b8' : '#dc3
 <h1>Manage Pending Reservations</h1>
 
 <a href="declined_reservations.php" class="view-declined-btn">
-    <i class="fas fa-ban me-2"></i>View Declined Reservations
+    <i class="fas fa-ban me-2"></i>View Canceled Reservations
 </a>
 
 <div class="info-badge">
@@ -600,7 +600,7 @@ if ($reservations_result->num_rows === 0) {
     </button>
     <button class="action-btn decline-btn" 
             onclick="confirmAction(<?php echo $row['customer_id']; ?>, '<?php echo $row['reservation_date']; ?>', '<?php echo $row['reservation_time']; ?>', 'decline', <?php echo $vehicle_count; ?>)">
-        ⛔ Decline <?php echo $vehicle_count > 1 ? "All" : ""; ?>
+        ⛔ Cancel<?php echo $vehicle_count > 1 ? "All" : ""; ?>
     </button>
 </td>
 </tr>
