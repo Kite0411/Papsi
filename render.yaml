@@ -10,16 +10,16 @@ services:
       - key: FLASK_ENV
         value: production
       - key: CORS_ORIGINS
-        value: https://goldenrod-quetzal-768639.hostingersite.com
+        value: https://papsipaps.online
       # Database connection to Hostinger MySQL
       - key: DB_HOST
-        value: auth-db1983.hstgr.io
+        value: auth-db1986.hstgr.io
       - key: DB_USER
-        value: u563434200_papsipaps
+        value: u929029793_papsipaps
       - key: DB_PASSWORD
-        value: u563434200_@A
+        value: u929029793_@A
       - key: DB_NAME
-        value: u563434200_papsipaps
+        value: u929029793_papsipaps
       - key: DB_PORT
         value: 3306
     healthCheckPath: /health
