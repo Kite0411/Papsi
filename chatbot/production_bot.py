@@ -371,7 +371,7 @@ PROBLEM_CATEGORIES = {
             'refrigerant', 'freon', 'compressor', 'blower', 'vent', 'ac not working',
             'aircon not working', 'no aircon'
         ],
-        'exact_services': ['Aircon Cleaning'],
+        'exact_services': ['Aircon Cleaning', 'AC Cleaning', 'Air Conditioning Service', 'Aircon Service', 'AC Service'],
         'priority': 1
     },
     'electrical': {
