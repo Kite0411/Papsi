@@ -1,10 +1,6 @@
 """
 Papsi Repair Shop - Session-Aware Chatbot API
-FEATURES:
-1. Automatic customer recognition from session/token
-2. Personalized responses based on logged-in customer
-3. Direct reservation queries without asking credentials
-4. Accurate problem diagnosis
+FIXED: Connection pooling to prevent max_connections_per_hour errors
 """
 
 from flask import Flask, request, jsonify
@@ -12,6 +8,7 @@ from flask_cors import CORS
 import pandas as pd
 import os
 import mysql.connector
+from mysql.connector import pooling
 from pathlib import Path
 from dotenv import load_dotenv
 import re
@@ -39,6 +36,20 @@ DB_CONFIG = {
     'database': os.environ.get('DB_NAME', 'autorepair_db'),
     'port': int(os.environ.get('DB_PORT', 3306))
 }
+
+# ==================== CONNECTION POOL ====================
+# 🔥 FIX: Use connection pooling instead of creating new connections
+try:
+    db_pool = pooling.MySQLConnectionPool(
+        pool_name="chatbot_pool",
+        pool_size=5,  # Reuse 5 connections max
+        pool_reset_session=True,
+        **DB_CONFIG
+    )
+    print("✅ Database connection pool initialized (5 connections)")
+except Exception as e:
+    print(f"❌ Failed to create connection pool: {e}")
+    db_pool = None
 
 # ==================== FILE PATHS ====================
 
@@ -82,12 +93,17 @@ initialize_files()
 # ==================== DATABASE CONNECTION ====================
 
 def get_db_connection():
-    """Get database connection"""
+    """
+    🔥 FIXED: Get connection from pool instead of creating new one
+    """
     try:
-        conn = mysql.connector.connect(**DB_CONFIG)
-        return conn
+        if db_pool:
+            return db_pool.get_connection()
+        else:
+            # Fallback to direct connection if pool failed
+            return mysql.connector.connect(**DB_CONFIG)
     except Exception as e:
-        print(f"⚠️ DB error: {e}")
+        print(f"⚠️ DB connection error: {e}")
         return None
 
 # ==================== CUSTOMER SESSION HANDLING ====================
@@ -95,10 +111,7 @@ def get_db_connection():
 def get_customer_from_request(request):
     """
     Extract customer information from request
-    Supports multiple authentication methods:
-    1. X-Customer-ID header (preferred)
-    2. customer_id in request body
-    3. Authorization token (if you use JWT)
+    🔥 FIXED: Uses single connection for the whole function
     """
     customer_id = None
     
@@ -111,12 +124,6 @@ def get_customer_from_request(request):
         if data:
             customer_id = data.get('customer_id')
     
-    # Method 3: Check Authorization header (JWT example)
-    # if not customer_id:
-    #     auth_header = request.headers.get('Authorization')
-    #     if auth_header:
-    #         customer_id = decode_jwt_token(auth_header)
-    
     if customer_id:
         print(f"👤 Customer ID from request: {customer_id}")
         return get_customer_details(customer_id)
@@ -125,8 +132,10 @@ def get_customer_from_request(request):
 
 def get_customer_details(customer_id):
     """
-    Fetch customer details from database
+    🔥 FIXED: Proper connection closing with try-finally
     """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if not conn:
@@ -140,8 +149,6 @@ def get_customer_details(customer_id):
         """, (customer_id, customer_id))
         
         customer = cursor.fetchone()
-        cursor.close()
-        conn.close()
         
         if customer:
             print(f"✅ Found customer: {customer['name']} ({customer['email']})")
@@ -151,11 +158,19 @@ def get_customer_details(customer_id):
     except Exception as e:
         print(f"❌ Error fetching customer: {e}")
         return None
+    finally:
+        # 🔥 CRITICAL: Always close cursor and connection
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 def get_customer_reservations(customer_id):
     """
-    Get all reservations for a specific customer with their services
+    🔥 FIXED: Single connection for entire function, proper cleanup
     """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if not conn:
@@ -185,7 +200,7 @@ def get_customer_reservations(customer_id):
         cursor.execute(query, (customer_id,))
         reservations = cursor.fetchall()
         
-        # Get services for each reservation
+        # Get services for each reservation (reuse same cursor)
         for reservation in reservations:
             reservation_id = reservation['id']
             
@@ -199,15 +214,11 @@ def get_customer_reservations(customer_id):
             cursor.execute(service_query, (reservation_id,))
             services = cursor.fetchall()
             
-            # Format services as a comma-separated string
             if services:
                 service_names = [f"{svc['service_name']} (₱{float(svc['price']):,.0f})" for svc in services]
                 reservation['services'] = ", ".join(service_names)
             else:
                 reservation['services'] = "No services listed"
-        
-        cursor.close()
-        conn.close()
         
         print(f"📋 Found {len(reservations)} reservations for customer {customer_id}")
         return reservations
@@ -216,12 +227,15 @@ def get_customer_reservations(customer_id):
         print(f"❌ Reservation query error: {e}")
         traceback.print_exc()
         return []
+    finally:
+        # 🔥 CRITICAL: Always close cursor and connection
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 def format_reservation_response(reservations, customer_name=None):
-    """
-    Format reservation data into readable response
-    Shows ALL reservations, not just 3
-    """
+    """Format reservation data into readable response"""
     if not reservations:
         greeting = f"Hi {customer_name}! " if customer_name else ""
         return f"{greeting}You don't have any reservations yet. Would you like to schedule a service?"
@@ -254,28 +268,24 @@ def format_reservation_response(reservations, customer_name=None):
     
     response = f"{greeting}Here are your reservations:\n\n"
     
-    # Show ALL upcoming appointments
     if upcoming:
         response += "📅 UPCOMING APPOINTMENTS:\n"
-        for res in upcoming:  # Show ALL, not just [:3]
+        for res in upcoming:
             response += format_single_reservation(res) + "\n"
     
-    # Show ALL pending
     if pending:
         response += "\n⏳ PENDING CONFIRMATION:\n"
-        for res in pending:  # Show ALL, not just [:2]
+        for res in pending:
             response += format_single_reservation(res) + "\n"
     
-    # Show ALL completed
     if completed:
         response += "\n✅ COMPLETED SERVICES:\n"
-        for res in completed:  # Show ALL
+        for res in completed:
             response += format_single_reservation(res) + "\n"
     
-    # Show ALL cancelled
     if cancelled:
         response += "\n❌ CANCELLED:\n"
-        for res in cancelled:  # Show ALL
+        for res in cancelled:
             response += format_single_reservation(res) + "\n"
     
     return response.strip()
@@ -304,16 +314,13 @@ def format_single_reservation(res):
     if res['vehicle_make']:
         text += f"     🚗 {res['vehicle_year']} {res['vehicle_make']} {res['vehicle_model']}\n"
     
-    # Get services for this reservation
     if 'services' in res and res['services']:
         text += f"     🔧 Services: {res['services']}\n"
     
     return text
 
 def is_reservation_query(message):
-    """
-    Check if message is asking about reservations
-    """
+    """Check if message is asking about reservations"""
     reservation_keywords = [
         'reservation', 'reservations', 'booking', 'appointment', 'appointments',
         'schedule', 'status', 'when is my', 'what time', 'my appointment',
@@ -334,7 +341,7 @@ PROBLEM_CATEGORIES = {
             'hard brake', 'stiff brake', 'brake vibration', 'brake pulsing', 
             'abs', 'brake light', 'parking brake', 'cant stop', "can't stop"
         ],
-        'exact_services': [],  # No brake service in your database
+        'exact_services': [],
         'priority': 1
     },
     'engine': {
@@ -404,41 +411,30 @@ PROBLEM_CATEGORIES = {
 }
 
 def diagnose_problem(user_message):
-    """
-    Accurately diagnose vehicle problem with SMART matching
-    Prioritizes specific keywords over generic ones
-    """
+    """Diagnose vehicle problem with smart matching"""
     message_lower = user_message.lower()
     
     diagnoses = []
-    
-    # Generic keywords that appear in multiple categories
     generic_keywords = ['not working', 'problem', 'issue', 'broken', 'failing', 'failed']
     
-    # Check each category
     for category, data in PROBLEM_CATEGORIES.items():
         matched_keywords = []
         specific_matches = []
         generic_matches = []
         
-        # Look for exact keyword matches
         for keyword in data['keywords']:
             if keyword in message_lower:
                 matched_keywords.append(keyword)
                 
-                # Separate specific vs generic matches
                 if keyword in generic_keywords:
                     generic_matches.append(keyword)
                 else:
                     specific_matches.append(keyword)
         
-        # Only count if we have SPECIFIC matches (not just generic ones)
         if specific_matches:
-            # Score heavily favors specific matches
             specific_score = len(specific_matches) * 20
             generic_score = len(generic_matches) * 2
             total_score = specific_score + generic_score
-            
             confidence = min(95, total_score)
             
             diagnoses.append({
@@ -449,7 +445,6 @@ def diagnose_problem(user_message):
                 'priority': data['priority']
             })
     
-    # Sort by confidence (which now heavily favors specific matches)
     diagnoses.sort(key=lambda x: (x['confidence'], -x['priority']), reverse=True)
     
     if diagnoses:
@@ -459,15 +454,11 @@ def diagnose_problem(user_message):
     return diagnoses
 
 def match_services_to_problem(diagnoses, services):
-    """
-    Match services to diagnosed problems using EXACT service names
-    """
+    """Match services to diagnosed problems using EXACT service names"""
     if not diagnoses:
         return []
     
     matched_services = []
-    
-    # Only use the TOP diagnosis (most confident)
     top_diagnosis = diagnoses[0]
     category = top_diagnosis['category']
     category_data = PROBLEM_CATEGORIES[category]
@@ -475,17 +466,14 @@ def match_services_to_problem(diagnoses, services):
     
     print(f"🔎 Looking for exact services: {exact_service_names}")
     
-    # Find services that EXACTLY match the service names
     for service in services:
         service_name = service['service_name']
         
-        # Check if this service name is in our exact list
         if service_name in exact_service_names:
             score = top_diagnosis['confidence']
             matched_services.append((service, score, category))
             print(f"   ✅ Matched: {service['service_name']}")
     
-    # If no exact matches found, tell user we don't have that service
     if not matched_services:
         print(f"   ⚠️ No services found for {category} problem")
     
@@ -502,10 +490,7 @@ def preprocess_text(text):
     return text
 
 def smart_faq_search(user_message, faq_data):
-    """
-    Smart FAQ search with STRICT matching to prevent wrong answers
-    Only returns high-confidence matches
-    """
+    """Smart FAQ search with STRICT matching"""
     user_clean = preprocess_text(user_message)
     user_words = set(user_clean.split())
     user_words = {word for word in user_words if len(word) > 2}
@@ -528,38 +513,34 @@ def smart_faq_search(user_message, faq_data):
         if not question_words:
             continue
         
-        # Calculate word overlap
         common_words = user_words.intersection(question_words)
         
         if not common_words:
             continue
         
-        # Score based on:
-        # 1. Percentage of user words matched
-        # 2. Percentage of question words matched
         user_coverage = len(common_words) / len(user_words)
         question_coverage = len(common_words) / len(question_words)
-        
-        # Average of both coverages
         score = (user_coverage + question_coverage) / 2
         
-        # Bonus for exact phrase match
         if user_clean in question_clean or question_clean in user_clean:
             score += 0.3
         
-        # STRICT: Need high overlap to be confident
         if score > best_score:
             best_score = score
             best_match = answer
             best_question = question
     
-    if best_match and best_score > 0.3:  # Minimum 30% match
+    if best_match and best_score > 0.3:
         print(f"🎯 FAQ match: '{best_question}' (score: {best_score:.3f})")
     
     return best_match, best_score
 
 def get_services_from_db():
-    """Get services from database"""
+    """
+    🔥 FIXED: Proper connection cleanup
+    """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if not conn:
@@ -568,14 +549,18 @@ def get_services_from_db():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT service_name, description, duration, price FROM services WHERE is_archived = 0")
         services = cursor.fetchall()
-        cursor.close()
-        conn.close()
         
         return services
         
     except Exception as e:
         print(f"⚠️ Service query error: {e}")
         return []
+    finally:
+        # 🔥 CRITICAL: Always close
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # ==================== PENDING QUESTIONS ====================
 
@@ -682,9 +667,7 @@ def check_for_answer(question):
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """
-    Main chat endpoint with session-aware customer recognition
-    """
+    """Main chat endpoint with session-aware customer recognition"""
     try:
         data = request.get_json()
         if not data:
@@ -697,7 +680,7 @@ def chat():
         print(f"\n{'='*60}")
         print(f"📨 Message: '{user_message}'")
         
-        # 🔥 GET CUSTOMER FROM SESSION/REQUEST
+        # Get customer from session/request
         customer = get_customer_from_request(request)
         customer_name = customer['name'].split()[0] if customer else None
         
@@ -706,7 +689,7 @@ def chat():
         
         reply_parts = []
         
-        # 1️⃣ RESERVATION QUERY (No need to ask for credentials!)
+        # 1️⃣ RESERVATION QUERY
         if customer and is_reservation_query(user_message):
             print("🔍 Detected reservation query for logged-in customer")
             
@@ -719,7 +702,6 @@ def chat():
                 'customer_name': customer_name
             })
         
-        # If asking about reservations but NOT logged in
         if not customer and is_reservation_query(user_message):
             return jsonify({
                 'reply': "To view your reservations, please log in to your account first. 🔐"
@@ -741,16 +723,14 @@ def chat():
                 faq_data = pd.read_csv(FAQ_FILE)
                 faq_data = faq_data.dropna(subset=['question', 'answer'])
                 
-                # Only use FAQ if we have a HIGH confidence match
                 faq_reply, score = smart_faq_search(user_message, faq_data)
                 
-                # STRICT threshold: Only use FAQ if match score is very high
-                if faq_reply and score > 0.5:  # Need 50%+ match
+                if faq_reply and score > 0.5:
                     greeting = f"Hi {customer_name}! " if customer_name else ""
                     reply_parts.append(f"{greeting}💡 {faq_reply}")
                     print(f"✅ FAQ match used (score: {score:.2f})")
                 else:
-                    faq_reply = None  # Reject low-confidence matches
+                    faq_reply = None
                     if score > 0:
                         print(f"❌ FAQ match rejected (score too low: {score:.2f})")
                     
@@ -780,7 +760,6 @@ def chat():
                     
                     reply_parts.append("\n💬 Would you like to schedule an appointment?")
                 else:
-                    # Problem identified but no service available
                     problem_category = diagnoses[0]['category']
                     greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
                     
@@ -919,29 +898,29 @@ def health():
     return jsonify({
         "status": "healthy",
         "service": "Session-Aware Papsi Chatbot",
-        "version": "3.0"
+        "version": "3.1 - Fixed Connection Pooling"
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
         "service": "Papsi Repair Shop - Session-Aware Chatbot",
-        "features": [
-            "Automatic customer recognition",
-            "Session-based authentication",
-            "Direct reservation queries",
-            "Accurate problem diagnosis"
+        "version": "3.1",
+        "fixes": [
+            "Connection pooling (5 max connections)",
+            "Proper connection cleanup with try-finally",
+            "Prevents max_connections_per_hour errors"
         ]
     }), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 Session-Aware Papsi Chatbot - Port {port}")
+    print(f"🚀 Session-Aware Papsi Chatbot v3.1 - Port {port}")
     print(f"{'='*60}")
+    print("✅ Connection pooling enabled (max 5 connections)")
     print("✅ Automatic customer recognition from session")
-    print("✅ No need to ask for phone/email/ID")
-    print("✅ Personalized greetings and responses")
+    print("✅ Fixed: max_connections_per_hour limit")
     print(f"{'='*60}\n")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
