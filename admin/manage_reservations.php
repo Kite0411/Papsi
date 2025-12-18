@@ -672,9 +672,9 @@ function confirmAction(customer_id, date, time, action, vehicleCount){
         yesBtn.innerText = 'Approve';
         yesBtn.style.background = '#2e7d32';
     } else if (action === 'decline') {
-        title.innerText = '⛔ Decline ' + (vehicleCount > 1 ? 'Multi-Vehicle ' : '') + 'Reservation?';
-        message.innerText = `This will decline ${vehicleText} and move them to declined list.`;
-        yesBtn.innerText = 'Decline';
+        title.innerText = '⛔ Cancel' + (vehicleCount > 1 ? 'Multi-Vehicle ' : '') + 'Reservation?';
+        message.innerText = `This will cancel ${vehicleText} and move them to canceled list.`;
+        yesBtn.innerText = 'Cancel';
         yesBtn.style.background = '#c62828';
     }
     
