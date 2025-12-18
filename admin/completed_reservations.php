@@ -492,7 +492,6 @@ if ($completed_result->num_rows === 0) {
     </span>
 </td>
 <td data-label="Action">
-<a href="#" onclick="confirmAction(<?php echo $row['id']; ?>, 'restore'); return false;">♻️ Restore</a>
 <a href="#" onclick="confirmAction(<?php echo $row['id']; ?>, 'delete'); return false;" style="color: #c62828;">🗑️ Delete</a>
 </td>
 </tr>
