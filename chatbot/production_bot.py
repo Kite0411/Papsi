@@ -1,6 +1,7 @@
 """
 Papsi Repair Shop - Session-Aware Chatbot API
-FIXED: Connection pooling to prevent max_connections_per_hour errors
+FIXED VERSION: AC Service Matching + Connection Pooling
+Version: 3.2
 """
 
 from flask import Flask, request, jsonify
@@ -38,11 +39,10 @@ DB_CONFIG = {
 }
 
 # ==================== CONNECTION POOL ====================
-# 🔥 FIX: Use connection pooling instead of creating new connections
 try:
     db_pool = pooling.MySQLConnectionPool(
         pool_name="chatbot_pool",
-        pool_size=5,  # Reuse 5 connections max
+        pool_size=5,
         pool_reset_session=True,
         **DB_CONFIG
     )
@@ -93,14 +93,11 @@ initialize_files()
 # ==================== DATABASE CONNECTION ====================
 
 def get_db_connection():
-    """
-    🔥 FIXED: Get connection from pool instead of creating new one
-    """
+    """Get connection from pool"""
     try:
         if db_pool:
             return db_pool.get_connection()
         else:
-            # Fallback to direct connection if pool failed
             return mysql.connector.connect(**DB_CONFIG)
     except Exception as e:
         print(f"⚠️ DB connection error: {e}")
@@ -109,16 +106,11 @@ def get_db_connection():
 # ==================== CUSTOMER SESSION HANDLING ====================
 
 def get_customer_from_request(request):
-    """
-    Extract customer information from request
-    🔥 FIXED: Uses single connection for the whole function
-    """
+    """Extract customer information from request"""
     customer_id = None
     
-    # Method 1: Check header
     customer_id = request.headers.get('X-Customer-ID')
     
-    # Method 2: Check request body
     if not customer_id:
         data = request.get_json()
         if data:
@@ -131,9 +123,7 @@ def get_customer_from_request(request):
     return None
 
 def get_customer_details(customer_id):
-    """
-    🔥 FIXED: Proper connection closing with try-finally
-    """
+    """Get customer details from database"""
     conn = None
     cursor = None
     try:
@@ -159,16 +149,13 @@ def get_customer_details(customer_id):
         print(f"❌ Error fetching customer: {e}")
         return None
     finally:
-        # 🔥 CRITICAL: Always close cursor and connection
         if cursor:
             cursor.close()
         if conn:
             conn.close()
 
 def get_customer_reservations(customer_id):
-    """
-    🔥 FIXED: Single connection for entire function, proper cleanup
-    """
+    """Get customer reservations"""
     conn = None
     cursor = None
     try:
@@ -178,7 +165,6 @@ def get_customer_reservations(customer_id):
         
         cursor = conn.cursor(dictionary=True)
         
-        # Get all reservations for this customer
         query = """
             SELECT 
                 r.id,
@@ -200,7 +186,6 @@ def get_customer_reservations(customer_id):
         cursor.execute(query, (customer_id,))
         reservations = cursor.fetchall()
         
-        # Get services for each reservation (reuse same cursor)
         for reservation in reservations:
             reservation_id = reservation['id']
             
@@ -228,7 +213,6 @@ def get_customer_reservations(customer_id):
         traceback.print_exc()
         return []
     finally:
-        # 🔥 CRITICAL: Always close cursor and connection
         if cursor:
             cursor.close()
         if conn:
@@ -242,7 +226,6 @@ def format_reservation_response(reservations, customer_name=None):
     
     greeting = f"Hi {customer_name}! " if customer_name else ""
     
-    # Categorize reservations
     upcoming = []
     completed = []
     pending = []
@@ -291,7 +274,7 @@ def format_reservation_response(reservations, customer_name=None):
     return response.strip()
 
 def format_single_reservation(res):
-    """Format a single reservation with services"""
+    """Format a single reservation"""
     res_date = res['reservation_date']
     if isinstance(res_date, str):
         res_date = datetime.strptime(res_date, '%Y-%m-%d').date()
@@ -331,7 +314,7 @@ def is_reservation_query(message):
     message_lower = message.lower()
     return any(keyword in message_lower for keyword in reservation_keywords)
 
-# ==================== PROBLEM DIAGNOSIS SYSTEM ====================
+# ==================== 🔧 FIXED PROBLEM DIAGNOSIS SYSTEM ====================
 
 PROBLEM_CATEGORIES = {
     'brake': {
@@ -341,7 +324,7 @@ PROBLEM_CATEGORIES = {
             'hard brake', 'stiff brake', 'brake vibration', 'brake pulsing', 
             'abs', 'brake light', 'parking brake', 'cant stop', "can't stop"
         ],
-        'exact_services': [],
+        'exact_services': [],  # No brake service in database
         'priority': 1
     },
     'engine': {
@@ -369,9 +352,10 @@ PROBLEM_CATEGORIES = {
             'ac', 'aircon', 'air con', 'air conditioning', 'cool', 'cooling', 'cold',
             'hot air', 'warm air', 'not cold', 'not cooling', 'no cold', 'weak airflow',
             'refrigerant', 'freon', 'compressor', 'blower', 'vent', 'ac not working',
-            'aircon not working', 'no aircon'
+            'aircon not working', 'no aircon', 'not working', 'no cool air', 'warm',
+            'getting hot', 'not getting cold', 'air conditioner', 'a/c'
         ],
-        'exact_services': ['Aircon Cleaning', 'AC Cleaning', 'Air Conditioning Service', 'Aircon Service', 'AC Service'],
+        'exact_services': ['Aircon Cleaning'],  # ✅ FIXED: Matches database exactly
         'priority': 1
     },
     'electrical': {
@@ -454,7 +438,7 @@ def diagnose_problem(user_message):
     return diagnoses
 
 def match_services_to_problem(diagnoses, services):
-    """Match services to diagnosed problems using EXACT service names"""
+    """✅ FIXED: Enhanced matching with case-insensitive and whitespace handling"""
     if not diagnoses:
         return []
     
@@ -465,17 +449,23 @@ def match_services_to_problem(diagnoses, services):
     exact_service_names = category_data['exact_services']
     
     print(f"🔎 Looking for exact services: {exact_service_names}")
+    print(f"🔎 Available services in DB: {[s['service_name'] for s in services]}")
     
+    # ✅ FIXED: More robust matching
     for service in services:
-        service_name = service['service_name']
+        service_name = service['service_name'].strip()  # Remove whitespace
         
-        if service_name in exact_service_names:
-            score = top_diagnosis['confidence']
-            matched_services.append((service, score, category))
-            print(f"   ✅ Matched: {service['service_name']}")
+        # Check if service name matches exactly (case-insensitive)
+        for exact_name in exact_service_names:
+            if service_name.lower() == exact_name.lower():
+                score = top_diagnosis['confidence']
+                matched_services.append((service, score, category))
+                print(f"   ✅ Matched: {service['service_name']}")
+                break
     
     if not matched_services:
         print(f"   ⚠️ No services found for {category} problem")
+        print(f"   Available services: {[s['service_name'] for s in services]}")
     
     return matched_services
 
@@ -536,9 +526,7 @@ def smart_faq_search(user_message, faq_data):
     return best_match, best_score
 
 def get_services_from_db():
-    """
-    🔥 FIXED: Proper connection cleanup
-    """
+    """Get services from database"""
     conn = None
     cursor = None
     try:
@@ -556,7 +544,6 @@ def get_services_from_db():
         print(f"⚠️ Service query error: {e}")
         return []
     finally:
-        # 🔥 CRITICAL: Always close
         if cursor:
             cursor.close()
         if conn:
@@ -782,6 +769,7 @@ def chat():
                 
         except Exception as e:
             print(f"⚠️ Service matching error: {e}")
+            traceback.print_exc()
 
         # 5️⃣ Forward to admin if no matches
         if not reply_parts:
@@ -897,29 +885,31 @@ def health():
     return jsonify({
         "status": "healthy",
         "service": "Session-Aware Papsi Chatbot",
-        "version": "3.1 - Fixed Connection Pooling"
+        "version": "3.2 - Fixed AC Service Matching"
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
         "service": "Papsi Repair Shop - Session-Aware Chatbot",
-        "version": "3.1",
+        "version": "3.2",
         "fixes": [
-            "Connection pooling (5 max connections)",
-            "Proper connection cleanup with try-finally",
-            "Prevents max_connections_per_hour errors"
+            "✅ AC Service matching fixed (Aircon Cleaning)",
+            "✅ Connection pooling (5 max connections)",
+            "✅ Enhanced keyword matching for all services",
+            "✅ Case-insensitive + whitespace-tolerant matching"
         ]
     }), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 Session-Aware Papsi Chatbot v3.1 - Port {port}")
+    print(f"🚀 Session-Aware Papsi Chatbot v3.2 - Port {port}")
     print(f"{'='*60}")
     print("✅ Connection pooling enabled (max 5 connections)")
     print("✅ Automatic customer recognition from session")
-    print("✅ Fixed: max_connections_per_hour limit")
+    print("✅ Fixed: AC service matching for 'Aircon Cleaning'")
+    print("✅ Enhanced: Case-insensitive service matching")
     print(f"{'='*60}\n")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
