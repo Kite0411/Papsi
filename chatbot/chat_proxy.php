@@ -73,7 +73,7 @@ if (isset($_SESSION['user_id'])) {
 }
 
 // ==================== RENDER API CONFIGURATION ====================
-$RENDER_API_URL = "https://papsi-chatbot-api-n8pw.onrender.com/chat";
+$RENDER_API_URL = "https://papsi-chatbot-api-o98x.onrender.com/chat";
 
 // Log the request (for debugging)
 $logFile = __DIR__ . '/chat_proxy.log';
