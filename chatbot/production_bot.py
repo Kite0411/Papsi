@@ -1,7 +1,7 @@
 """
-Papsi Repair Shop - Session-Aware Chatbot API
-FIXED VERSION: AC Service Matching + Connection Pooling
-Version: 3.2
+Papsi Repair Shop - Enhanced Lightweight Chatbot API
+Using DistilBERT for semantic matching with FAQ and Database
+Version: 4.0 - Lightweight + Accurate
 """
 
 from flask import Flask, request, jsonify
@@ -16,6 +16,10 @@ import re
 import traceback
 import time
 from datetime import datetime
+import numpy as np
+from sentence_transformers import SentenceTransformer
+import torch
+from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 
 load_dotenv()
 app = Flask(__name__)
@@ -38,16 +42,44 @@ DB_CONFIG = {
     'port': int(os.environ.get('DB_PORT', 3306))
 }
 
+# ==================== LIGHTWEIGHT TRANSFORMER MODEL ====================
 
-# ==================== CONNECTION POOL ====================
+print("🔄 Loading ultra-lightweight transformer model for 512MB RAM...")
+try:
+    # Using paraphrase-MiniLM-L3-v2: Ultra-small (61MB), fast, good enough accuracy
+    # Better for 512MB RAM than all-MiniLM-L6-v2 (80MB)
+    model = SentenceTransformer('paraphrase-MiniLM-L3-v2', device='cpu')
+    
+    # Force CPU mode for stability on low RAM
+    model = model.to('cpu')
+    model.eval()  # Set to evaluation mode for faster inference
+    
+    # Disable gradient computation for inference (saves memory)
+    torch.set_grad_enabled(False)
+    
+    # Set low memory mode
+    torch.set_num_threads(2)  # Limit CPU threads to save memory
+    
+    print("✅ Model loaded on CPU (ultra-low memory mode)")
+    print(f"✅ Transformer model: paraphrase-MiniLM-L3-v2")
+    print(f"   Model size: ~61MB, Embedding dimension: 384")
+    print(f"   Memory optimized for 512MB RAM")
+    print(f"   PyTorch version: {torch.__version__}")
+    
+except Exception as e:
+    print(f"❌ Failed to load transformer model: {e}")
+    traceback.print_exc()
+    model = None
+
+# ==================== CONNECTION POOL (512MB RAM OPTIMIZED) ====================
 try:
     db_pool = pooling.MySQLConnectionPool(
         pool_name="chatbot_pool",
-        pool_size=5,
+        pool_size=2,  # Reduced from 5 for 512MB RAM
         pool_reset_session=True,
         **DB_CONFIG
     )
-    print("✅ Database connection pool initialized (5 connections)")
+    print("✅ Database connection pool initialized (2 connections - low memory mode)")
 except Exception as e:
     print(f"❌ Failed to create connection pool: {e}")
     db_pool = None
@@ -91,6 +123,68 @@ def initialize_files():
 
 initialize_files()
 
+# ==================== EMBEDDING CACHE (512MB RAM OPTIMIZED) ====================
+
+# Minimal caching for low memory (512MB RAM)
+faq_embeddings_cache = None
+service_embeddings_cache = None
+last_cache_update = 0
+CACHE_TTL = 120  # 2 minutes (reduced from 5 for memory)
+MAX_CACHED_FAQS = 50  # Limit FAQ cache size
+
+def get_faq_embeddings(faq_data):
+    """Get or compute FAQ embeddings with caching (512MB RAM optimized)"""
+    global faq_embeddings_cache, last_cache_update
+    
+    current_time = time.time()
+    
+    # Return cached if available and fresh
+    if faq_embeddings_cache is not None and (current_time - last_cache_update) < CACHE_TTL:
+        return faq_embeddings_cache
+    
+    if model is None or len(faq_data) == 0:
+        return None
+    
+    try:
+        # Limit FAQ entries to save memory
+        if len(faq_data) > MAX_CACHED_FAQS:
+            print(f"⚠️ Limiting FAQ cache to {MAX_CACHED_FAQS} entries (RAM optimization)")
+            faq_data = faq_data.head(MAX_CACHED_FAQS)
+        
+        questions = faq_data['question'].tolist()
+        # Use convert_to_tensor=False for numpy arrays (faster on CPU, less memory)
+        embeddings = model.encode(questions, convert_to_tensor=False, show_progress_bar=False, batch_size=8)
+        faq_embeddings_cache = embeddings
+        last_cache_update = current_time
+        print(f"✅ Cached {len(questions)} FAQ embeddings (~{len(questions)*0.4:.1f}KB)")
+        return embeddings
+    except Exception as e:
+        print(f"⚠️ Error computing FAQ embeddings: {e}")
+        return None
+
+def get_service_embeddings(services):
+    """Compute service embeddings on-demand (NO CACHE for 512MB RAM)"""
+    global service_embeddings_cache
+    
+    if model is None or len(services) == 0:
+        return None
+    
+    # For 512MB RAM: NO CACHING - compute on demand
+    # Service descriptions change rarely, but caching uses ~10-20KB per service
+    try:
+        # Combine service name and description for better matching
+        service_texts = [
+            f"{s['service_name']} {s['description']}" 
+            for s in services
+        ]
+        # Use convert_to_tensor=False for numpy arrays, batch_size for memory
+        embeddings = model.encode(service_texts, convert_to_tensor=False, show_progress_bar=False, batch_size=4)
+        print(f"✅ Computed {len(services)} service embeddings on-demand")
+        return embeddings
+    except Exception as e:
+        print(f"⚠️ Error computing service embeddings: {e}")
+        return None
+
 # ==================== DATABASE CONNECTION ====================
 
 def get_db_connection():
@@ -118,7 +212,6 @@ def get_customer_from_request(request):
             customer_id = data.get('customer_id')
     
     if customer_id:
-        print(f"👤 Customer ID from request: {customer_id}")
         return get_customer_details(customer_id)
     
     return None
@@ -206,7 +299,6 @@ def get_customer_reservations(customer_id):
             else:
                 reservation['services'] = "No services listed"
         
-        print(f"📋 Found {len(reservations)} reservations for customer {customer_id}")
         return reservations
         
     except Exception as e:
@@ -264,12 +356,7 @@ def format_reservation_response(reservations, customer_name=None):
     
     if completed:
         response += "\n✅ COMPLETED SERVICES:\n"
-        for res in completed:
-            response += format_single_reservation(res) + "\n"
-    
-    if cancelled:
-        response += "\n❌ CANCELLED:\n"
-        for res in cancelled:
+        for res in completed[:3]:  # Show only last 3 completed
             response += format_single_reservation(res) + "\n"
     
     return response.strip()
@@ -315,216 +402,139 @@ def is_reservation_query(message):
     message_lower = message.lower()
     return any(keyword in message_lower for keyword in reservation_keywords)
 
-# ==================== 🔧 FIXED PROBLEM DIAGNOSIS SYSTEM ====================
+# ==================== SEMANTIC FAQ SEARCH ====================
 
-PROBLEM_CATEGORIES = {
-    'brake': {
-        'keywords': [
-            'brake', 'brakes', 'braking', 'stop', 'stopping', 'brake pedal', 
-            'squeak', 'squeal', 'grind', 'grinding', 'soft brake', 'spongy brake', 
-            'hard brake', 'stiff brake', 'brake vibration', 'brake pulsing', 
-            'abs', 'brake light', 'parking brake', 'cant stop', "can't stop"
-        ],
-        'exact_services': [],  # No brake service in database
-        'priority': 1
-    },
-    'engine': {
-        'keywords': [
-            'engine', 'motor', 'power', 'acceleration', 'rpm', 'rev', 'idle', 'stall',
-            'rough', 'jerky', 'hesitation', 'misfire', 'backfire', 'smoke', 'exhaust',
-            'check engine', 'knocking', 'rattling', 'ticking', 'overheating', 'overheat',
-            'temperature', 'coolant', 'radiator', 'shaking', 'vibrating', 'loss of power',
-            'weak', 'no power', 'engine noise'
-        ],
-        'exact_services': ['Engine Tune Up'],
-        'priority': 1
-    },
-    'oil': {
-        'keywords': [
-            'oil', 'oil change', 'change oil', 'lubricant', 'filter', 'dirty oil', 
-            'black oil', 'oil leak', 'leaking oil', 'oil level', 'oil pressure',
-            'oil light', 'maintenance', 'service due', 'lube'
-        ],
-        'exact_services': ['Change Oil'],
-        'priority': 1
-    },
-    'aircon': {
-        'keywords': [
-            'ac', 'aircon', 'air con', 'air conditioning', 'cool', 'cooling', 'cold',
-            'hot air', 'warm air', 'not cold', 'not cooling', 'no cold', 'weak airflow',
-            'refrigerant', 'freon', 'compressor', 'blower', 'vent', 'ac not working',
-            'aircon not working', 'no aircon', 'not working', 'no cool air', 'warm',
-            'getting hot', 'not getting cold', 'air conditioner', 'a/c'
-        ],
-        'exact_services': ['Aircon Cleaning'],  # ✅ FIXED: Matches database exactly
-        'priority': 1
-    },
-    'electrical': {
-        'keywords': [
-            'electrical', 'battery', 'dead battery', "won't start", "wont start", 'no start',
-            'crank', 'alternator', 'charging', 'voltage', 'fuse', 'relay', 'wiring',
-            'spark plug', 'ignition', 'starter', 'lights', 'radio', 'power window',
-            'wiper', 'electrical problem'
-        ],
-        'exact_services': ['Electrical'],
-        'priority': 1
-    },
-    'body': {
-        'keywords': [
-            'body', 'panel', 'dent', 'scratch', 'damage', 'collision', 'accident',
-            'bumper', 'fender', 'door', 'hood', 'trunk', 'rust', 'bent'
-        ],
-        'exact_services': ['Auto Body Repair'],
-        'priority': 2
-    },
-    'painting': {
-        'keywords': [
-            'paint', 'painting', 'repaint', 'color', 'fade', 'faded', 'peeling',
-            'clear coat', 'spray', 'auto paint'
-        ],
-        'exact_services': ['Auto Painting'],
-        'priority': 2
-    },
-    'wash': {
-        'keywords': [
-            'wash', 'clean', 'cleaning', 'dirty', 'under', 'undercarriage', 'mud',
-            'dirt', 'debris', 'underwash', 'underbody'
-        ],
-        'exact_services': ['Under Wash'],
-        'priority': 3
-    }
-}
-
-def diagnose_problem(user_message):
-    """Diagnose vehicle problem with smart matching"""
-    message_lower = user_message.lower()
+def semantic_faq_search(user_message, faq_data, threshold=0.65):
+    """
+    Use transformer embeddings to find best FAQ match
+    Returns: (answer, confidence_score, matched_question)
+    """
+    if model is None or len(faq_data) == 0:
+        return None, 0, None
     
-    diagnoses = []
-    generic_keywords = ['not working', 'problem', 'issue', 'broken', 'failing', 'failed']
-    
-    for category, data in PROBLEM_CATEGORIES.items():
-        matched_keywords = []
-        specific_matches = []
-        generic_matches = []
+    try:
+        # Get FAQ embeddings (cached)
+        faq_embeddings = get_faq_embeddings(faq_data)
+        if faq_embeddings is None:
+            return None, 0, None
         
-        for keyword in data['keywords']:
-            if keyword in message_lower:
-                matched_keywords.append(keyword)
-                
-                if keyword in generic_keywords:
-                    generic_matches.append(keyword)
-                else:
-                    specific_matches.append(keyword)
+        # Encode user message (batch_size=1 for memory optimization)
+        user_embedding = model.encode(user_message, convert_to_tensor=False, show_progress_bar=False, batch_size=1)
         
-        if specific_matches:
-            specific_score = len(specific_matches) * 20
-            generic_score = len(generic_matches) * 2
-            total_score = specific_score + generic_score
-            confidence = min(95, total_score)
+        # Convert to numpy arrays for sklearn
+        user_embedding_np = np.array([user_embedding])
+        faq_embeddings_np = faq_embeddings
+        
+        # Compute cosine similarities using sklearn (faster on CPU)
+        similarities = sklearn_cosine_similarity(user_embedding_np, faq_embeddings_np)[0]
+        
+        # Get best match
+        best_idx = similarities.argmax()
+        best_score = similarities[best_idx]
+        
+        if best_score >= threshold:
+            answer = faq_data.iloc[best_idx]['answer']
+            question = faq_data.iloc[best_idx]['question']
+            print(f"🎯 FAQ Match: '{question}' (confidence: {best_score:.3f})")
+            return answer, best_score, question
+        else:
+            print(f"❌ FAQ match below threshold: {best_score:.3f} < {threshold}")
+            return None, best_score, None
             
-            diagnoses.append({
-                'category': category,
-                'confidence': confidence,
-                'matched_keywords': matched_keywords,
-                'specific_matches': specific_matches,
-                'priority': data['priority']
-            })
-    
-    diagnoses.sort(key=lambda x: (x['confidence'], -x['priority']), reverse=True)
-    
-    if diagnoses:
-        print(f"🔍 Diagnosis: {diagnoses[0]['category']} ({diagnoses[0]['confidence']}% confident)")
-        print(f"   Specific matches: {diagnoses[0]['specific_matches']}")
-    
-    return diagnoses
+    except Exception as e:
+        print(f"⚠️ Semantic FAQ search error: {e}")
+        traceback.print_exc()
+        return None, 0, None
 
-def match_services_to_problem(diagnoses, services):
-    """✅ FIXED: Enhanced matching with case-insensitive and whitespace handling"""
-    if not diagnoses:
+# ==================== SEMANTIC SERVICE MATCHING ====================
+
+def semantic_service_matching(user_message, services, threshold=0.5):
+    """
+    Use transformer embeddings to match services
+    Returns: list of (service, confidence_score)
+    """
+    if model is None or len(services) == 0:
         return []
     
+    try:
+        # Get service embeddings (computed on-demand for 512MB RAM)
+        service_embeddings = get_service_embeddings(services)
+        if service_embeddings is None:
+            return []
+        
+        # Encode user message (batch_size=1 for memory optimization)
+        user_embedding = model.encode(user_message, convert_to_tensor=False, show_progress_bar=False, batch_size=1)
+        
+        # Convert to numpy arrays for sklearn
+        user_embedding_np = np.array([user_embedding])
+        service_embeddings_np = service_embeddings
+        
+        # Compute cosine similarities using sklearn (faster on CPU, less memory)
+        similarities = sklearn_cosine_similarity(user_embedding_np, service_embeddings_np)[0]
+        
+        # Get all matches above threshold
+        matched_services = []
+        for idx, score in enumerate(similarities):
+            if score >= threshold:
+                matched_services.append((services[idx], float(score)))
+        
+        # Sort by score
+        matched_services.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return top 3
+        top_matches = matched_services[:3]
+        
+        if top_matches:
+            print(f"🔧 Service Matches:")
+            for service, score in top_matches:
+                print(f"   - {service['service_name']}: {score:.3f}")
+        
+        return top_matches
+        
+    except Exception as e:
+        print(f"⚠️ Semantic service matching error: {e}")
+        traceback.print_exc()
+        return []
+
+# ==================== KEYWORD-BASED FALLBACK ====================
+
+PROBLEM_KEYWORDS = {
+    'engine': ['engine', 'motor', 'power', 'stall', 'misfire', 'overheating', 'noise', 'smoke'],
+    'brake': ['brake', 'stop', 'squeak', 'grind', 'pedal', 'abs'],
+    'oil': ['oil', 'change oil', 'lubricant', 'leak', 'filter'],
+    'aircon': ['ac', 'aircon', 'air conditioning', 'cooling', 'cold', 'hot air', 'not cooling'],
+    'electrical': ['battery', 'start', 'alternator', 'electrical', 'lights', 'wiring'],
+    'body': ['body', 'dent', 'scratch', 'damage', 'panel'],
+    'paint': ['paint', 'color', 'spray'],
+    'wash': ['wash', 'clean', 'under']
+}
+
+def keyword_based_service_match(user_message, services):
+    """Fallback: Match services using keywords"""
+    message_lower = user_message.lower()
     matched_services = []
-    top_diagnosis = diagnoses[0]
-    category = top_diagnosis['category']
-    category_data = PROBLEM_CATEGORIES[category]
-    exact_service_names = category_data['exact_services']
     
-    print(f"🔎 Looking for exact services: {exact_service_names}")
-    print(f"🔎 Available services in DB: {[s['service_name'] for s in services]}")
-    
-    # ✅ FIXED: More robust matching
     for service in services:
-        service_name = service['service_name'].strip()  # Remove whitespace
+        service_name = service['service_name'].lower()
+        service_desc = service['description'].lower()
         
-        # Check if service name matches exactly (case-insensitive)
-        for exact_name in exact_service_names:
-            if service_name.lower() == exact_name.lower():
-                score = top_diagnosis['confidence']
-                matched_services.append((service, score, category))
-                print(f"   ✅ Matched: {service['service_name']}")
+        # Check if any part of service name is in message
+        name_words = service_name.split()
+        for word in name_words:
+            if len(word) > 3 and word in message_lower:
+                matched_services.append((service, 0.7))
                 break
+        
+        # Check problem keywords
+        for problem_type, keywords in PROBLEM_KEYWORDS.items():
+            if any(kw in message_lower for kw in keywords):
+                if problem_type in service_name or problem_type in service_desc:
+                    if (service, 0.7) not in matched_services:
+                        matched_services.append((service, 0.6))
     
-    if not matched_services:
-        print(f"   ⚠️ No services found for {category} problem")
-        print(f"   Available services: {[s['service_name'] for s in services]}")
-    
-    return matched_services
+    return matched_services[:3]
 
-# ==================== TEXT PROCESSING ====================
-
-def preprocess_text(text):
-    """Clean and preprocess text"""
-    if not isinstance(text, str):
-        return ""
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    return text
-
-def smart_faq_search(user_message, faq_data):
-    """Smart FAQ search with STRICT matching"""
-    user_clean = preprocess_text(user_message)
-    user_words = set(user_clean.split())
-    user_words = {word for word in user_words if len(word) > 2}
-    
-    if not user_words:
-        return None, 0
-        
-    best_match = None
-    best_score = 0
-    best_question = None
-    
-    for idx, row in faq_data.iterrows():
-        question = str(row['question'])
-        answer = str(row['answer'])
-        question_clean = preprocess_text(question)
-        
-        question_words = set(question_clean.split())
-        question_words = {word for word in question_words if len(word) > 2}
-        
-        if not question_words:
-            continue
-        
-        common_words = user_words.intersection(question_words)
-        
-        if not common_words:
-            continue
-        
-        user_coverage = len(common_words) / len(user_words)
-        question_coverage = len(common_words) / len(question_words)
-        score = (user_coverage + question_coverage) / 2
-        
-        if user_clean in question_clean or question_clean in user_clean:
-            score += 0.3
-        
-        if score > best_score:
-            best_score = score
-            best_match = answer
-            best_question = question
-    
-    if best_match and best_score > 0.3:
-        print(f"🎯 FAQ match: '{best_question}' (score: {best_score:.3f})")
-    
-    return best_match, best_score
+# ==================== DATABASE OPERATIONS ====================
 
 def get_services_from_db():
     """Get services from database"""
@@ -655,7 +665,7 @@ def check_for_answer(question):
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Main chat endpoint with session-aware customer recognition"""
+    """Main chat endpoint with semantic matching"""
     try:
         data = request.get_json()
         if not data:
@@ -704,69 +714,50 @@ def chat():
                 'admin_answered': True
             })
         
-        # 3️⃣ Check FAQ with STRICT matching
+        # 3️⃣ SEMANTIC FAQ SEARCH (using transformer)
         faq_reply = None
         try:
             if FAQ_FILE.exists():
                 faq_data = pd.read_csv(FAQ_FILE)
                 faq_data = faq_data.dropna(subset=['question', 'answer'])
                 
-                faq_reply, score = smart_faq_search(user_message, faq_data)
-                
-                if faq_reply and score > 0.5:
-                    greeting = f"Hi {customer_name}! " if customer_name else ""
-                    reply_parts.append(f"{greeting}💡 {faq_reply}")
-                    print(f"✅ FAQ match used (score: {score:.2f})")
-                else:
-                    faq_reply = None
-                    if score > 0:
-                        print(f"❌ FAQ match rejected (score too low: {score:.2f})")
+                if len(faq_data) > 0:
+                    faq_reply, faq_score, matched_q = semantic_faq_search(user_message, faq_data, threshold=0.65)
+                    
+                    if faq_reply:
+                        greeting = f"Hi {customer_name}! " if customer_name else ""
+                        reply_parts.append(f"{greeting}💡 {faq_reply}")
+                        print(f"✅ FAQ match used (score: {faq_score:.2f})")
                     
         except Exception as e:
             print(f"⚠️ FAQ error: {e}")
 
-        # 4️⃣ Diagnose problem and recommend services
+        # 4️⃣ SEMANTIC SERVICE MATCHING (using transformer)
         try:
             services = get_services_from_db()
-            diagnoses = diagnose_problem(user_message)
             
-            if diagnoses:
-                matched_services = match_services_to_problem(diagnoses, services)
+            if services and not faq_reply:
+                # Try semantic matching first
+                matched_services = semantic_service_matching(user_message, services, threshold=0.5)
+                
+                # Fallback to keyword matching if semantic fails
+                if not matched_services:
+                    matched_services = keyword_based_service_match(user_message, services)
                 
                 if matched_services:
                     greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
-                    reply_parts.append(f"{greeting}🔧 Based on your problem, I recommend:\n")
+                    reply_parts.append(f"{greeting}🔧 Based on your concern, I recommend:\n")
                     
-                    for service, score, category in matched_services:
+                    for service, score in matched_services:
                         part = (
-                            f"• {service['service_name']}\n"
+                            f"• **{service['service_name']}**\n"
                             f"  📝 {service['description']}\n"
                             f"  🕒 Duration: {service['duration']}\n"
                             f"  💰 Price: ₱{float(service['price']):,.2f}\n"
                         )
                         reply_parts.append(part)
                     
-                else:
-                    problem_category = diagnoses[0]['category']
-                    greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
-                    
-                    problem_names = {
-                        'brake': 'brake',
-                        'engine': 'engine',
-                        'oil': 'oil change',
-                        'aircon': 'air conditioning',
-                        'electrical': 'electrical',
-                        'body': 'body repair',
-                        'painting': 'painting',
-                        'wash': 'car wash'
-                    }
-                    
-                    problem_name = problem_names.get(problem_category, problem_category)
-                    reply_parts.append(
-                        f"{greeting}I understand you're having {problem_name} issues. "
-                        f"Unfortunately, we don't currently have a specific {problem_name} service in our system. "
-                        f"Please call us at our shop for assistance with this issue."
-                    )
+                    reply_parts.append("\nWould you like to schedule an appointment for any of these services?")
                 
         except Exception as e:
             print(f"⚠️ Service matching error: {e}")
@@ -857,6 +848,10 @@ def admin_chat():
             
             faq = pd.concat([faq, new_row], ignore_index=True)
             faq.to_csv(FAQ_FILE, index=False)
+            
+            # Invalidate FAQ cache to reload with new entry
+            global faq_embeddings_cache
+            faq_embeddings_cache = None
 
         except Exception as e:
             return jsonify({'reply': f'Error saving: {str(e)}'}), 500
@@ -885,32 +880,49 @@ def admin_chat():
 def health():
     return jsonify({
         "status": "healthy",
-        "service": "Session-Aware Papsi Chatbot",
-        "version": "3.2 - Fixed AC Service Matching"
+        "service": "Ultra-Lightweight Papsi Chatbot (512MB RAM)",
+        "version": "4.0-512MB",
+        "model": "paraphrase-MiniLM-L3-v2",
+        "model_size": "~61MB",
+        "memory_mode": "Ultra-low (512MB RAM optimized)",
+        "features": [
+            "Semantic FAQ Search",
+            "Semantic Service Matching", 
+            "Customer Session Support",
+            "512MB RAM Optimized"
+        ]
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
-        "service": "Papsi Repair Shop - Session-Aware Chatbot",
-        "version": "3.2",
-        "fixes": [
-            "✅ AC Service matching fixed (Aircon Cleaning)",
-            "✅ Connection pooling (5 max connections)",
-            "✅ Enhanced keyword matching for all services",
-            "✅ Case-insensitive + whitespace-tolerant matching"
+        "service": "Papsi Repair Shop - Ultra-Lightweight Semantic Chatbot",
+        "version": "4.0-512MB",
+        "model": "paraphrase-MiniLM-L3-v2 (DistilBERT)",
+        "optimizations": [
+            "✅ Ultra-lightweight transformer (61MB)",
+            "✅ Optimized for 512MB RAM",
+            "✅ Minimal FAQ caching (50 max)",
+            "✅ On-demand service embeddings",
+            "✅ Reduced connection pool (2 max)",
+            "✅ Low memory batch processing",
+            "✅ Fast inference on CPU",
+            "✅ Customer session support"
         ]
     }), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 Session-Aware Papsi Chatbot v3.2 - Port {port}")
+    print(f"🚀 Ultra-Lightweight Papsi Chatbot v4.0-512MB - Port {port}")
     print(f"{'='*60}")
-    print("✅ Connection pooling enabled (max 5 connections)")
-    print("✅ Automatic customer recognition from session")
-    print("✅ Fixed: AC service matching for 'Aircon Cleaning'")
-    print("✅ Enhanced: Case-insensitive service matching")
+    print("✅ Model: paraphrase-MiniLM-L3-v2 (DistilBERT)")
+    print("✅ Size: ~61MB (ultra-lightweight!)")
+    print("✅ Memory: Optimized for 512MB RAM")
+    print("✅ Speed: Fast CPU inference with minimal memory")
+    print("✅ Features: Semantic matching for FAQ & Services")
+    print("✅ Caching: FAQ only (2 min TTL, 50 max entries)")
+    print("✅ Connection pool: 2 connections (low memory mode)")
     print(f"{'='*60}\n")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
