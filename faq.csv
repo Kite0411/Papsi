@@ -1107,7 +1107,8 @@ I have a Check engine light on after rain,Use an OBD-II scanner to read trouble 
 ABS light on,"Check wheel speed sensors and ABS modules. Scan for ABS-specific codes. Check the battery terminals, fuses, and listen for unusual noises.",
 I have a Oil leak in the van,"Inspect valve cover gasket, oil pan gasket, and front/rear main seals for leaks. Start with basic checks: fluids, belts, fuses, and visible leaks.",
 Oil leak under load,"Inspect valve cover gasket, oil pan gasket, and front/rear main seals for leaks.",
-My Hybrid not charging when driving,Regenerative system issue or inverter; scan for hybrid-specific codes.,
+My Hybrid not charging when driving,Regenerative system issue or i
+nverter; scan for hybrid-specific codes.,
 my break is too weak,try to check if its on maintenance,
 can i cook egg on small pan?,"Sorry, that's not on my scope",
 how to clean ref,"Sorry, that's not on my scope",
@@ -1119,7 +1120,6 @@ Facebook: Papsi Pap's Auto Repair Shop",
 kumain ka na?,hindi pa po,
 question,answer,follow_up
 hi,Hey! I'm your auto repair assistant. What can I do for you?,
-hey,Hello! How can I assist you with your vehicle?,
 good morning,Good morning! How can I help you today?,
 good afternoon,Good afternoon! What brings you here?,
 good evening,Good evening! How may I assist you?,
