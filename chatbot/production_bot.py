@@ -31,11 +31,11 @@ CORS(app, resources={
 # ==================== CONFIGURATION ====================
 
 DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', '127.0.0.1'),
-    'user': os.environ.get('DB_USER', 'root'),
-    'password': os.environ.get('DB_PASSWORD', ''),
-    'database': os.environ.get('DB_NAME', 'autorepair_db'),
-    'port': int(os.environ.get('DB_PORT', 3306))
+    'host': 'localhost',
+    'user': 'u929029793_papsipaps',
+    'password': 'u929029793_@A',
+    'database': 'u929029793_papsipaps',
+    'port': 3306
 }
 
 # ==================== CONNECTION POOL ====================
