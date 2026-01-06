@@ -1,9 +1,7 @@
-
-
 """
 Papsi Repair Shop - Session-Aware Chatbot API
-FIXED VERSION: AC Service Matching + Connection Pooling
-Version: 3.2
+FIXED VERSION: AC Service Matching + Payment/Business Query Fix
+Version: 3.3
 """
 
 from flask import Flask, request, jsonify
@@ -39,7 +37,6 @@ DB_CONFIG = {
     'database': os.environ.get('DB_NAME', 'autorepair_db'),
     'port': int(os.environ.get('DB_PORT', 3306))
 }
-
 
 # ==================== CONNECTION POOL ====================
 try:
@@ -317,6 +314,76 @@ def is_reservation_query(message):
     message_lower = message.lower()
     return any(keyword in message_lower for keyword in reservation_keywords)
 
+# ==================== PAYMENT & BUSINESS QUERY CHECK ====================
+
+def check_payment_business_query(user_message):
+    """Check if message is about payment, hours, location, etc."""
+    message_lower = user_message.lower()
+    
+    # Common shorthand/typo handling
+    message_lower = message_lower.replace(' u ', ' you ')
+    message_lower = message_lower.replace(' ur ', ' your ')
+    
+    # Payment keywords
+    payment_keywords = [
+        'credit card', 'debit card', 'cash', 'payment', 'pay', 
+        'bank transfer', 'mastercard', 'visa', 'gcash', 'maya',
+        'ewallet', 'how to pay', 'payment method', 'mode of payment',
+        'accepted payment', 'payment options', 'billing'
+    ]
+    
+    # Business info keywords
+    business_keywords = [
+        'location', 'address', 'where are you', 'phone', 'contact',
+        'number', 'open', 'close', 'hours', 'hour', 'time', 'today',
+        'schedule', 'when do you', 'what time', 'operation'
+    ]
+    
+    # Services keywords
+    services_keywords = [
+        'services', 'service list', 'price', 'cost', 'how much',
+        'offer', 'what do you', 'available services', 'list of services'
+    ]
+    
+    # Check each category
+    for keyword in payment_keywords:
+        if keyword in message_lower:
+            return "payment"
+    
+    for keyword in business_keywords:
+        if keyword in message_lower:
+            return "business"
+    
+    for keyword in services_keywords:
+        if keyword in message_lower:
+            return "services"
+    
+    return None
+
+def get_payment_business_response(user_message, category, customer_name=None):
+    """Get appropriate response for payment/business queries"""
+    greeting = f"Hi {customer_name}! " if customer_name else ""
+    
+    message_lower = user_message.lower()
+    
+    if category == "payment":
+        return f"{greeting}💳 Yes, we accept credit cards, debit cards, cash, and bank transfers."
+    
+    elif category == "business":
+        if 'location' in message_lower or 'address' in message_lower or 'where' in message_lower:
+            return f"{greeting}📍 We're located at: 0925 Purok 6, Culianin, Plaridel Bulacan"
+        elif 'phone' in message_lower or 'contact' in message_lower or 'number' in message_lower:
+            return f"{greeting}📞 Call us at: +63 912 345 6789"
+        elif 'open' in message_lower or 'close' in message_lower or 'hours' in message_lower or 'time' in message_lower:
+            return f"{greeting}🕐 We're open Monday-Friday 8AM-6PM and Saturday 9AM-5PM. Closed Sundays."
+        else:
+            return f"{greeting}📞 Contact: +63 912 345 6789 | 📍 Address: 0925 Purok 6, Culianin, Plaridel Bulacan"
+    
+    elif category == "services":
+        return f"{greeting}🔧 Our services: Electrical (₱200), Auto Body Repair (₱200), Aircon Cleaning (₱750), Auto Painting (₱30,000), Under Wash (₱1,000), Engine Tune Up (₱2,000), Change Oil (₱800)"
+    
+    return None
+
 # ==================== 🔧 FIXED PROBLEM DIAGNOSIS SYSTEM ====================
 
 PROBLEM_CATEGORIES = {
@@ -483,8 +550,17 @@ def preprocess_text(text):
     return text
 
 def smart_faq_search(user_message, faq_data):
-    """Smart FAQ search with STRICT matching"""
-    user_clean = preprocess_text(user_message)
+    """Smart FAQ search with BETTER matching"""
+    # First, handle common typos and shorthand
+    user_lower = user_message.lower()
+    
+    # Replace common shorthand
+    user_lower = user_lower.replace(' u ', ' you ')
+    user_lower = user_lower.replace(' ur ', ' your ')
+    user_lower = user_lower.replace(' r ', ' are ')
+    
+    # Now clean for matching
+    user_clean = preprocess_text(user_lower)
     user_words = set(user_clean.split())
     user_words = {word for word in user_words if len(word) > 2}
     
@@ -498,7 +574,13 @@ def smart_faq_search(user_message, faq_data):
     for idx, row in faq_data.iterrows():
         question = str(row['question'])
         answer = str(row['answer'])
-        question_clean = preprocess_text(question)
+        
+        # Also handle typos in FAQ questions
+        question_lower = question.lower()
+        question_lower = question_lower.replace(' u ', ' you ')
+        question_lower = question_lower.replace(' ur ', ' your ')
+        
+        question_clean = preprocess_text(question_lower)
         
         question_words = set(question_clean.split())
         question_words = {word for word in question_words if len(word) > 2}
@@ -515,7 +597,10 @@ def smart_faq_search(user_message, faq_data):
         question_coverage = len(common_words) / len(question_words)
         score = (user_coverage + question_coverage) / 2
         
+        # Boost score for exact or close matches
         if user_clean in question_clean or question_clean in user_clean:
+            score += 0.5
+        elif user_lower in question_lower or question_lower in user_lower:
             score += 0.3
         
         if score > best_score:
@@ -523,10 +608,12 @@ def smart_faq_search(user_message, faq_data):
             best_match = answer
             best_question = question
     
-    if best_match and best_score > 0.3:
+    # LOWER the threshold for FAQ matches
+    if best_match and best_score > 0.2:  # Changed from 0.5 to 0.2
         print(f"🎯 FAQ match: '{best_question}' (score: {best_score:.3f})")
+        return best_match, best_score
     
-    return best_match, best_score
+    return None, 0
 
 def get_services_from_db():
     """Get services from database"""
@@ -697,7 +784,20 @@ def chat():
                 'reply': "To view your reservations, please log in to your account first. 🔐"
             })
         
-        # 2️⃣ Check for admin answer
+        # 2️⃣ PAYMENT & BUSINESS QUERY CHECK
+        # Add this check BEFORE FAQ to catch payment/business questions
+        query_type = check_payment_business_query(user_message)
+        if query_type:
+            print(f"🔍 Detected {query_type} query")
+            response = get_payment_business_response(user_message, query_type, customer_name)
+            if response:
+                return jsonify({
+                    'reply': response,
+                    'type': query_type,
+                    'customer_name': customer_name
+                })
+        
+        # 3️⃣ Check for admin answer
         recent_answer = check_for_answer(user_message)
         if recent_answer:
             greeting = f"Hi {customer_name}! " if customer_name else ""
@@ -706,7 +806,7 @@ def chat():
                 'admin_answered': True
             })
         
-        # 3️⃣ Check FAQ with STRICT matching
+        # 4️⃣ Check FAQ with IMPROVED matching
         faq_reply = None
         try:
             if FAQ_FILE.exists():
@@ -715,7 +815,7 @@ def chat():
                 
                 faq_reply, score = smart_faq_search(user_message, faq_data)
                 
-                if faq_reply and score > 0.5:
+                if faq_reply and score > 0.2:  # Lowered threshold from 0.5 to 0.2
                     greeting = f"Hi {customer_name}! " if customer_name else ""
                     reply_parts.append(f"{greeting}💡 {faq_reply}")
                     print(f"✅ FAQ match used (score: {score:.2f})")
@@ -727,7 +827,7 @@ def chat():
         except Exception as e:
             print(f"⚠️ FAQ error: {e}")
 
-        # 4️⃣ Diagnose problem and recommend services
+        # 5️⃣ Diagnose problem and recommend services
         try:
             services = get_services_from_db()
             diagnoses = diagnose_problem(user_message)
@@ -774,7 +874,7 @@ def chat():
             print(f"⚠️ Service matching error: {e}")
             traceback.print_exc()
 
-        # 5️⃣ Forward to admin if no matches
+        # 6️⃣ Forward to admin if no matches
         if not reply_parts:
             saved = save_pending_question(user_message)
             
@@ -888,31 +988,32 @@ def health():
     return jsonify({
         "status": "healthy",
         "service": "Session-Aware Papsi Chatbot",
-        "version": "3.2 - Fixed AC Service Matching"
+        "version": "3.3 - Payment/Business Query Fix"
     }), 200
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
         "service": "Papsi Repair Shop - Session-Aware Chatbot",
-        "version": "3.2",
+        "version": "3.3",
         "fixes": [
             "✅ AC Service matching fixed (Aircon Cleaning)",
+            "✅ Payment/Business query detection (credit card, hours, location, etc.)",
+            "✅ Improved FAQ matching with typo handling",
             "✅ Connection pooling (5 max connections)",
-            "✅ Enhanced keyword matching for all services",
-            "✅ Case-insensitive + whitespace-tolerant matching"
+            "✅ Enhanced keyword matching for all services"
         ]
     }), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 Session-Aware Papsi Chatbot v3.2 - Port {port}")
+    print(f"🚀 Session-Aware Papsi Chatbot v3.3 - Port {port}")
     print(f"{'='*60}")
+    print("✅ Payment/Business query detection enabled")
+    print("✅ Improved FAQ matching with typo handling")
     print("✅ Connection pooling enabled (max 5 connections)")
     print("✅ Automatic customer recognition from session")
-    print("✅ Fixed: AC service matching for 'Aircon Cleaning'")
-    print("✅ Enhanced: Case-insensitive service matching")
     print(f"{'='*60}\n")
     
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
