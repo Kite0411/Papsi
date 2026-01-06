@@ -89,7 +89,27 @@ except Exception as e:
 CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
 
-FAQ_FILE = ROOT_DIR / 'faq.csv'
+# Try multiple locations for FAQ file
+def find_faq_file():
+    """Find FAQ file in multiple possible locations"""
+    possible_paths = [
+        ROOT_DIR / 'faq.csv',                    # Parent directory
+        CURRENT_DIR / 'faq.csv',                 # Same directory as bot
+        Path('/home/claude/faq.csv'),            # Absolute path
+        Path('./faq.csv'),                       # Current working directory
+        ROOT_DIR / 'chatbot' / 'faq.csv',       # In chatbot folder
+    ]
+    
+    for path in possible_paths:
+        if path.exists():
+            print(f"✅ Found FAQ file at: {path}")
+            return path
+    
+    # If not found, create in parent directory
+    print("⚠️ FAQ file not found, creating new one in parent directory")
+    return ROOT_DIR / 'faq.csv'
+
+FAQ_FILE = find_faq_file()
 PENDING_FILE = CURRENT_DIR / 'pending_questions.csv'
 ANSWERED_FILE = CURRENT_DIR / 'answered_questions.json'
 
@@ -404,18 +424,23 @@ def is_reservation_query(message):
 
 # ==================== SEMANTIC FAQ SEARCH ====================
 
-def semantic_faq_search(user_message, faq_data, threshold=0.65):
+def semantic_faq_search(user_message, faq_data, threshold=0.55):
     """
     Use transformer embeddings to find best FAQ match
     Returns: (answer, confidence_score, matched_question)
     """
     if model is None or len(faq_data) == 0:
+        print("⚠️ Model not loaded or FAQ data empty")
         return None, 0, None
     
     try:
+        print(f"🔍 Searching FAQ for: '{user_message}'")
+        print(f"   FAQ entries available: {len(faq_data)}")
+        
         # Get FAQ embeddings (cached)
         faq_embeddings = get_faq_embeddings(faq_data)
         if faq_embeddings is None:
+            print("❌ Failed to get FAQ embeddings")
             return None, 0, None
         
         # Encode user message (batch_size=1 for memory optimization)
@@ -428,6 +453,12 @@ def semantic_faq_search(user_message, faq_data, threshold=0.65):
         # Compute cosine similarities using sklearn (faster on CPU)
         similarities = sklearn_cosine_similarity(user_embedding_np, faq_embeddings_np)[0]
         
+        # Get top 3 matches for debugging
+        top_3_indices = similarities.argsort()[-3:][::-1]
+        print(f"   Top 3 matches:")
+        for idx in top_3_indices:
+            print(f"     - '{faq_data.iloc[idx]['question']}': {similarities[idx]:.3f}")
+        
         # Get best match
         best_idx = similarities.argmax()
         best_score = similarities[best_idx]
@@ -435,10 +466,10 @@ def semantic_faq_search(user_message, faq_data, threshold=0.65):
         if best_score >= threshold:
             answer = faq_data.iloc[best_idx]['answer']
             question = faq_data.iloc[best_idx]['question']
-            print(f"🎯 FAQ Match: '{question}' (confidence: {best_score:.3f})")
+            print(f"✅ FAQ Match: '{question}' (confidence: {best_score:.3f})")
             return answer, best_score, question
         else:
-            print(f"❌ FAQ match below threshold: {best_score:.3f} < {threshold}")
+            print(f"❌ Best match below threshold: {best_score:.3f} < {threshold}")
             return None, best_score, None
             
     except Exception as e:
@@ -716,37 +747,57 @@ def chat():
         
         # 3️⃣ SEMANTIC FAQ SEARCH (using transformer)
         faq_reply = None
+        faq_confidence = 0
         try:
             if FAQ_FILE.exists():
                 faq_data = pd.read_csv(FAQ_FILE)
                 faq_data = faq_data.dropna(subset=['question', 'answer'])
                 
                 if len(faq_data) > 0:
-                    faq_reply, faq_score, matched_q = semantic_faq_search(user_message, faq_data, threshold=0.65)
+                    print(f"📚 Loaded {len(faq_data)} FAQ entries from {FAQ_FILE}")
+                    
+                    # Lower threshold for more matches (0.55 instead of 0.65)
+                    faq_reply, faq_score, matched_q = semantic_faq_search(user_message, faq_data, threshold=0.55)
                     
                     if faq_reply:
                         greeting = f"Hi {customer_name}! " if customer_name else ""
                         reply_parts.append(f"{greeting}💡 {faq_reply}")
                         print(f"✅ FAQ match used (score: {faq_score:.2f})")
+                        faq_confidence = faq_score
+                    else:
+                        print(f"❌ No FAQ match found (best score: {faq_score:.2f})")
+                else:
+                    print("⚠️ FAQ file is empty!")
+            else:
+                print(f"⚠️ FAQ file not found at: {FAQ_FILE}")
                     
         except Exception as e:
             print(f"⚠️ FAQ error: {e}")
+            traceback.print_exc()
 
         # 4️⃣ SEMANTIC SERVICE MATCHING (using transformer)
+        # Only recommend services if FAQ didn't provide a complete answer
         try:
             services = get_services_from_db()
             
-            if services and not faq_reply:
+            # Lower threshold for more service matches (0.45 instead of 0.5)
+            if services and faq_confidence < 0.75:  # If FAQ confidence is low, also show services
                 # Try semantic matching first
-                matched_services = semantic_service_matching(user_message, services, threshold=0.5)
+                matched_services = semantic_service_matching(user_message, services, threshold=0.45)
                 
                 # Fallback to keyword matching if semantic fails
                 if not matched_services:
+                    print("🔄 Falling back to keyword-based service matching")
                     matched_services = keyword_based_service_match(user_message, services)
                 
                 if matched_services:
                     greeting = f"Hi {customer_name}! " if customer_name and not reply_parts else ""
-                    reply_parts.append(f"{greeting}🔧 Based on your concern, I recommend:\n")
+                    
+                    # If FAQ already answered, phrase it differently
+                    if reply_parts:
+                        reply_parts.append(f"\n🔧 You might also be interested in:\n")
+                    else:
+                        reply_parts.append(f"{greeting}🔧 Based on your concern, I recommend:\n")
                     
                     for service, score in matched_services:
                         part = (
@@ -757,7 +808,8 @@ def chat():
                         )
                         reply_parts.append(part)
                     
-                    reply_parts.append("\nWould you like to schedule an appointment for any of these services?")
+                    if not faq_reply:  # Only add this if FAQ didn't answer
+                        reply_parts.append("\nWould you like to schedule an appointment?")
                 
         except Exception as e:
             print(f"⚠️ Service matching error: {e}")
