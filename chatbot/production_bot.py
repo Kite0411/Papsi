@@ -2041,8 +2041,9 @@ def root():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 Session-Aware Papsi Chatbot v3.3 - Port {port}")
+    print(f"🚀 Session-Aware Papsi Chatbot v3.4 - Port {port}")
     print(f"{'='*60}")
+    print("✅ Pending questions path fixed")
     print("✅ Payment/Business query detection enabled")
     print("✅ Improved FAQ matching with typo handling")
     print("✅ Connection pooling enabled (max 5 connections)")
