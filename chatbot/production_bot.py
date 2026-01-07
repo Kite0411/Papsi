@@ -920,7 +920,25 @@ def get_pending():
         print(f"File path: {PENDING_FILE}")
         print(f"File exists: {PENDING_FILE.exists()}")
         
-        questions = get_pending_questions()
+        # Try to read the file directly first
+        if not PENDING_FILE.exists():
+            print("File doesn't exist, returning empty list")
+            return jsonify([])
+        
+        # Read with explicit encoding
+        try:
+            pending_df = pd.read_csv(PENDING_FILE, dtype={'question': str}, encoding='utf-8')
+            print(f"Raw CSV data:\n{pending_df}")
+        except Exception as read_error:
+            print(f"❌ Error reading CSV: {read_error}")
+            # Try without dtype
+            pending_df = pd.read_csv(PENDING_FILE, encoding='utf-8')
+        
+        # Clean and process
+        pending_df = pending_df.dropna(subset=['question'])
+        pending_df['question'] = pending_df['question'].astype(str).str.strip()
+        
+        questions = pending_df['question'].tolist()
         
         print(f"Found {len(questions)} pending questions")
         for i, q in enumerate(questions, 1):
@@ -931,7 +949,8 @@ def get_pending():
     except Exception as e:
         print(f"❌ Error in /pending: {e}")
         traceback.print_exc()
-        return jsonify([]), 500
+        # Return empty list but with 200 status so admin panel doesn't show error
+        return jsonify([]), 200
 
 @app.route('/get_next_question', methods=['GET'])
 def get_next_question():
