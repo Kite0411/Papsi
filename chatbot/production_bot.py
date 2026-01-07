@@ -57,11 +57,13 @@ CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
 
 FAQ_FILE = ROOT_DIR / 'faq.csv'
-PENDING_FILE = CURRENT_DIR / 'pending_questions.csv'
-ANSWERED_FILE = CURRENT_DIR / 'answered_questions.json'
+PENDING_FILE = ROOT_DIR / 'pending_questions.csv'  # ✅ FIXED: Changed from CURRENT_DIR
+ANSWERED_FILE = ROOT_DIR / 'answered_questions.json'  # ✅ FIXED: Changed from CURRENT_DIR
 
 print(f"📁 FAQ File: {FAQ_FILE}")
 print(f"📁 Pending File: {PENDING_FILE}")
+print(f"📁 Answered File: {ANSWERED_FILE}")
+```
 
 # ==================== INITIALIZE FILES ====================
 
