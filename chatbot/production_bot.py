@@ -1,19 +1,5 @@
 """
 Papsi Repair Shop - Session-Aware Chatbot API
-FIXED VERSION: AC Service Matching + Payment/Business Query Fix
-Version: 3.3
-"""
-
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import pandas as pd
-import os
-import mysql.connector
-from mysql.connector import pooling
-from pathlib import Path
-from dotenv import load_dotenv
-import """
-Papsi Repair Shop - Session-Aware Chatbot API
 FIXED VERSION: Pending Questions Path Fixed
 Version: 3.4
 """
