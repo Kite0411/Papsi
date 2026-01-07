@@ -1,9 +1,7 @@
 <?php
-// Admin Chatbot UI Component - FIXED VERSION
-// Corrects API endpoint URLs and adds better error handling
+// Chatbot UI Component - FIXED VERSION with polling for admin replies
 ?>
 <style>
-/* Same styling as before */
 .chatbot-container{position:fixed;bottom:20px;right:20px;width:350px;max-width:calc(100vw - 40px);background:#fff;border-radius:15px;box-shadow:0 10px 30px rgba(0,0,0,0.2);z-index:9999;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;transition:all .3s ease;overflow:hidden}
 .chatbot-header{background:linear-gradient(135deg,#DC143C,#B71C1C);color:#fff;padding:15px 20px;border-radius:15px 15px 0 0;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
 .chatbot-header h3{margin:0;font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
@@ -30,7 +28,7 @@
 .chatbot-send:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(220,20,60,.3)}
 .chatbot-send:disabled{opacity:.6;cursor:not-allowed;transform:none}
 .chatbot-typing{display:none;padding:10px 15px;color:#666;font-style:italic;font-size:13px}
-.chatbot-minimized{height:60px}
+.chatbot-minimized{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg, #DC143C, #B71C1C);box-shadow:0 6px 20px rgba(220, 20, 60, 0.4);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;transition:all .3s ease}
 .chatbot-minimized .chatbot-body{display:none}
 .chatbot-welcome{text-align:center;padding:20px;color:#666}
 .chatbot-welcome h4{margin:0 0 10px 0;color:#333}
@@ -44,26 +42,30 @@
 .typing-dot:nth-child(1){animation-delay:-.32s}
 .typing-dot:nth-child(2){animation-delay:-.16s}
 @keyframes typing{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1);opacity:1}}
-.pending-question-item{background:#fff3cd;border-left:3px solid #ffc107;padding:8px;margin:5px 0;font-size:12px;border-radius:4px}
-.error-message{background:#f8d7da;border-left:3px solid #dc3545;padding:8px;margin:5px 0;font-size:12px;border-radius:4px;color:#721c24}
-.success-message{background:#d4edda;border-left:3px solid #28a745;padding:8px;margin:5px 0;font-size:12px;border-radius:4px;color:#155724}
 </style>
 
-<div id="adminChatbot" class="chatbot-container" aria-live="polite">
+<div id="chatbot" class="chatbot-container" aria-live="polite">
+    <div class="chatbot-icon" id="chatbotIcon" style="display:none;position:fixed;bottom:20px;right:20px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#DC143C,#B71C1C);box-shadow:0 6px 20px rgba(220,20,60,0.4);align-items:center;justify-content:center;color:#fff;font-size:28px;cursor:pointer;z-index:9999;" onclick="toggleChatbot()">💬</div>
+    
     <div class="chatbot-header" onclick="toggleChatbot()" role="button" aria-expanded="true">
-        <h3 style="color:white;">
+        <h3>
             <span class="chatbot-status" id="chatbotStatus" title="Online"></span>
-            🤖 Admin Panel
+            🔧 Vehicle Assistant
         </h3>
-        <button class="chatbot-toggle" id="chatbotToggle" aria-label="Minimize chatbot">−</button>
+        <button class="chatbot-toggle" id="chatbotToggle" aria-label="Minimize chatbot">-</button>
     </div>
    
     <div class="chatbot-body" id="chatbotBody">
         <div class="chatbot-messages" id="chatbotMessages">
-            <div class="chatbot-welcome">
-                <h4>🤖 Admin Assistant</h4>
-                <p>Review customer questions and provide answers.</p>
-                <div id="pendingList" style="text-align:left; margin-top:10px;"></div>
+            <div class="chatbot-welcome" id="chatbotWelcome">
+                <h4>🔧 Vehicle Diagnostic Assistant</h4>
+                <p>Describe your vehicle problem and I'll recommend the right service!</p>
+                <div class="quick-questions">
+                    <div class="quick-question" onclick="askQuestion('My engine is making a strange noise')">Engine Noise</div>
+                    <div class="quick-question" onclick="askQuestion('My brakes are squeaking')">Brake Issues</div>
+                    <div class="quick-question" onclick="askQuestion('My AC is not cooling')">AC Problems</div>
+                    <div class="quick-question" onclick="askQuestion('My car won\\'t start')">Starting Issues</div>
+                </div>
             </div>
         </div>
        
@@ -76,7 +78,7 @@
         </div>
        
         <div class="chatbot-input">
-            <input type="text" id="chatbotInput" placeholder="Enter your answer..." maxlength="500" aria-label="Chat input">
+            <input type="text" id="chatbotInput" placeholder="Describe your vehicle problem..." maxlength="500" aria-label="Chat input">
             <button class="chatbot-send" id="chatbotSend" onclick="sendChatbotMessage()" aria-label="Send message">➤</button>
         </div>
     </div>
@@ -84,193 +86,161 @@
 
 <script>
 // ==================== CONFIGURATION ====================
-// 🔥 FIXED: Use correct Render API URL
-const RENDER_BASE = 'https://papsi-chatbot-api-ouo1.onrender.com';
-const API_URL = `${RENDER_BASE}/admin_chat`;
-const POLL_URL = `${RENDER_BASE}/get_next_question`;
-const PENDING_URL = `${RENDER_BASE}/pending`;
-
-let currentQuestion = null;
-let isFirstLoad = true;
-let connectionStatus = 'checking';
+const API_URL = '/chatbot/chat_proxy.php';
+let chatbotMinimized = true;
+let isTyping = false;
+let welcomeShown = false;
+let pendingQuestions = {}; // Track questions waiting for admin reply
 
 // ==================== UI FUNCTIONS ====================
 
+function toggleChatbot() {
+    const chatbot = document.getElementById('chatbot');
+    const toggle = document.getElementById('chatbotToggle');
+    const body = document.getElementById('chatbotBody');
+    const status = document.getElementById('chatbotStatus');
+    const icon = document.getElementById('chatbotIcon');
+    
+    chatbotMinimized = !chatbotMinimized;
+   
+    if (chatbotMinimized) {
+        chatbot.classList.add('chatbot-minimized');
+        toggle.textContent = '';
+        body.style.display = 'none';
+        icon.style.display = 'flex';
+        status.style.display = 'none';
+        toggle.setAttribute('aria-expanded', 'false');
+    } else {
+        chatbot.classList.remove('chatbot-minimized');
+        toggle.textContent = '−';
+        body.style.display = 'flex';
+        icon.style.display = 'none';
+        status.style.display = 'inline-block';
+        toggle.setAttribute('aria-expanded', 'true');
+        document.getElementById('chatbotInput').focus();
+    }
+}
+
+function showTyping() {
+    if (isTyping) return;
+    isTyping = true;
+    const typing = document.getElementById('chatbotTyping');
+    typing.style.display = 'block';
+    typing.setAttribute('aria-hidden', 'false');
+    scrollToBottom();
+}
+
+function hideTyping() {
+    isTyping = false;
+    const typing = document.getElementById('chatbotTyping');
+    typing.style.display = 'none';
+    typing.setAttribute('aria-hidden', 'true');
+}
+
 function addMessage(content, isUser = false) {
     const messages = document.getElementById('chatbotMessages');
-    
-    // Remove welcome message on first interaction
-    const welcome = messages.querySelector('.chatbot-welcome');
-    if (welcome && (isUser || !isFirstLoad)) {
-        welcome.remove();
-        isFirstLoad = false;
-    }
-    
-    const div = document.createElement('div');
-    div.className = `chatbot-message ${isUser ? 'message-user' : 'message-bot'}`;
-    div.innerHTML = `
-        <div class="message-avatar">${isUser ? '🧑‍🔧' : '🤖'}</div>
-        <div class="message-content">${escapeHtml(content).replace(/\n/g, '<br>')}</div>
-    `;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chatbot-message ${isUser ? 'message-user' : 'message-bot'}`;
+   
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.textContent = isUser ? '👤' : '🔧';
+   
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+   
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(messageContent);
+   
+    // Remove welcome on first message
+    const welcome = document.getElementById('chatbotWelcome');
+    if (welcome) welcome.remove();
+   
+    messages.appendChild(messageDiv);
+    scrollToBottom();
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, function(m) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    });
 }
 
-function updateConnectionStatus(status) {
-    connectionStatus = status;
-    const statusDot = document.getElementById('chatbotStatus');
-    if (statusDot) {
-        if (status === 'online') {
-            statusDot.style.background = '#4CAF50';
-            statusDot.title = 'Connected';
-        } else if (status === 'offline') {
-            statusDot.style.background = '#dc3545';
-            statusDot.title = 'Disconnected';
-        } else {
-            statusDot.style.background = '#ffc107';
-            statusDot.title = 'Connecting...';
-        }
-    }
+function scrollToBottom() {
+    const messages = document.getElementById('chatbotMessages');
+    setTimeout(() => messages.scrollTop = messages.scrollHeight, 80);
 }
 
-// ==================== PENDING QUESTIONS ====================
-
-async function loadAllPendingQuestions() {
-    const pendingDiv = document.getElementById('pendingList');
-    
-    try {
-        console.log('🔍 Fetching pending questions from:', PENDING_URL);
-        
-        const response = await fetch(PENDING_URL, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-        
-        console.log('📡 Response status:', response.status);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const questions = await response.json();
-        
-        console.log('📋 Received questions:', questions);
-        
-        // Handle both array and object responses
-        let questionList = [];
-        if (Array.isArray(questions)) {
-            questionList = questions;
-        } else if (questions.questions && Array.isArray(questions.questions)) {
-            questionList = questions.questions;
-        }
-        
-        if (questionList.length === 0) {
-            pendingDiv.innerHTML = '<div class="success-message">✅ No pending questions</div>';
-            updateConnectionStatus('online');
-            return [];
-        }
-        
-        // Display all pending questions
-        let html = `<div style="margin-bottom:10px; color:#dc3545; font-weight:bold;">
-                       📋 Pending Questions (${questionList.length})
-                    </div>`;
-        
-        questionList.forEach((question, index) => {
-            html += `<div class="pending-question-item">
-                        <strong>${index + 1}.</strong> ${escapeHtml(question)}
-                     </div>`;
-        });
-        
-        pendingDiv.innerHTML = html;
-        updateConnectionStatus('online');
-        return questionList;
-        
-    } catch (error) {
-        console.error('❌ Error loading pending questions:', error);
-        pendingDiv.innerHTML = `<div class="error-message">⚠️ Cannot connect to server<br><small>${error.message}</small></div>`;
-        updateConnectionStatus('offline');
-        return [];
-    }
+function askQuestion(question) {
+    const input = document.getElementById('chatbotInput');
+    input.value = question;
+    sendChatbotMessage();
 }
 
-async function autoLoadNextQuestion() {
-    try {
-        const response = await fetch(POLL_URL);
-        const data = await response.json();
-        
-        if (data.new && data.question) {
-            currentQuestion = data.question;
-            
-            // Only show if not already displayed
-            const messages = document.getElementById('chatbotMessages');
-            const messageText = messages.textContent || messages.innerText;
-            
-            if (!messageText.includes(data.question)) {
-                addMessage(`📌 New Customer Question:\n\n"${data.question}"\n\nPlease provide your answer:`);
-            }
-            return true;
-        }
-        return false;
-        
-    } catch (error) {
-        console.error('❌ Error loading next question:', error);
-        return false;
-    }
-}
-
-// ==================== SEND MESSAGE ====================
+// ==================== CHAT FUNCTION ====================
 
 async function sendChatbotMessage() {
     const input = document.getElementById('chatbotInput');
     const sendBtn = document.getElementById('chatbotSend');
     const message = input.value.trim();
-    
-    if (!message) {
-        addMessage("⚠️ Please type an answer first.");
-        return;
-    }
-    
-    // Show admin's message
-    addMessage(message, true);
-    input.value = '';
+   
+    if (!message || isTyping) return;
+   
     input.disabled = true;
     sendBtn.disabled = true;
-    
+   
+    addMessage(message, true);
+    input.value = '';
+   
+    showTyping();
+   
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000); // 60s for Render
+   
     try {
-        const response = await fetch(API_URL, {
+        const resp = await fetch(API_URL, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ message: message })
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+            signal: controller.signal
         });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+       
+        clearTimeout(timeout);
+       
+        if (!resp.ok) {
+            hideTyping();
+            addMessage(`Sorry, server error (${resp.status})`, false);
+            return;
         }
-        
-        const data = await response.json();
-        addMessage(data.reply || "✅ Answer saved!");
-        
-        // Refresh the pending list
-        await loadAllPendingQuestions();
-        await autoLoadNextQuestion();
-        
-        updateConnectionStatus('online');
-        
-    } catch (error) {
-        console.error('❌ Admin chat error:', error);
-        addMessage(`❌ Connection error: ${error.message}\n\nPlease check if the API is running.`);
-        updateConnectionStatus('offline');
+       
+        const data = await resp.json().catch(() => null);
+        hideTyping();
+       
+        if (data && data.reply) {
+            addMessage(data.reply, false);
+            
+            // 🆕 If forwarded to admin, track for polling
+            if (data.reply.includes("forwarded your question") || 
+                data.reply.includes("I'm not sure")) {
+                pendingQuestions[message] = Date.now();
+                savePendingQuestions();
+                console.log('📌 Tracking question for admin reply:', message);
+            }
+        } else {
+            addMessage('Sorry, unexpected response from server.', false);
+        }
+       
+    } catch (err) {
+        hideTyping();
+        if (err.name === 'AbortError') {
+            addMessage('Request timed out. The server may be slow. Please try again.', false);
+        } else {
+            addMessage('Connection error. Please try again.', false);
+            console.error('Chatbot error:', err);
+        }
     } finally {
         input.disabled = false;
         sendBtn.disabled = false;
@@ -278,41 +248,93 @@ async function sendChatbotMessage() {
     }
 }
 
-// ==================== INITIALIZATION ====================
+// ==================== POLLING FOR ADMIN REPLIES ====================
 
-async function initializeAdminPanel() {
-    updateConnectionStatus('checking');
-    addMessage("👋 Initializing admin panel...");
-    addMessage(`🔗 Connecting to: ${RENDER_BASE}`);
-    
-    // Test connection first
+function savePendingQuestions() {
     try {
-        const healthCheck = await fetch(`${RENDER_BASE}/health`, { method: 'GET' });
-        
-        if (healthCheck.ok) {
-            addMessage("✅ Connected to server!");
-            updateConnectionStatus('online');
-        } else {
-            addMessage("⚠️ Server responded but may have issues");
-            updateConnectionStatus('offline');
-        }
-    } catch (error) {
-        addMessage(`❌ Cannot connect to server: ${error.message}`);
-        updateConnectionStatus('offline');
-    }
-    
-    // Load pending questions
-    const questions = await loadAllPendingQuestions();
-    
-    if (questions.length > 0) {
-        addMessage(`📊 Found ${questions.length} pending question(s).`);
-        await autoLoadNextQuestion();
-    } else {
-        addMessage("✅ No pending questions. Waiting for customer inquiries...");
+        localStorage.setItem('chatbot_pending', JSON.stringify(pendingQuestions));
+    } catch (e) {
+        console.error('Failed to save pending questions:', e);
     }
 }
 
-// ==================== EVENT LISTENERS ====================
+function loadPendingQuestions() {
+    try {
+        const stored = localStorage.getItem('chatbot_pending');
+        if (stored) {
+            pendingQuestions = JSON.parse(stored);
+        }
+    } catch (e) {
+        console.error('Failed to load pending questions:', e);
+        pendingQuestions = {};
+    }
+}
+
+async function pollForAdminReplies() {
+    loadPendingQuestions();
+    
+    const now = Date.now();
+    const oneHourAgo = now - (60 * 60 * 1000);
+    
+    // Clean old questions (older than 1 hour)
+    for (const question in pendingQuestions) {
+        if (pendingQuestions[question] < oneHourAgo) {
+            delete pendingQuestions[question];
+        }
+    }
+    
+    // Check each pending question
+    for (const question in pendingQuestions) {
+        try {
+            const resp = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: question })
+            });
+            
+            if (resp.ok) {
+                const data = await resp.json();
+                
+                // Check if we got a real answer (not the pending message)
+                if (data.reply && 
+                    !data.reply.includes("forwarded your question") && 
+                    !data.reply.includes("I'm not sure")) {
+                    
+                    // Admin answered! Show notification
+                    console.log('✅ Admin answered:', question);
+                    addMessage(`🎉 <strong>Update on your question:</strong><br>"${question}"`, false);
+                    addMessage(data.reply, false);
+                    
+                    // Remove from pending
+                    delete pendingQuestions[question];
+                    savePendingQuestions();
+                    
+                    // Show notification if chatbot is minimized
+                    if (chatbotMinimized) {
+                        showNotificationBadge();
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Polling error:', e);
+        }
+    }
+    
+    savePendingQuestions();
+}
+
+function showNotificationBadge() {
+    const icon = document.getElementById('chatbotIcon');
+    if (icon) {
+        icon.style.animation = 'pulse 0.5s ease 3';
+        icon.textContent = '🔔';
+        setTimeout(() => {
+            icon.textContent = '💬';
+        }, 3000);
+    }
+}
+
+// ==================== INITIALIZATION ====================
 
 document.getElementById('chatbotInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -321,36 +343,18 @@ document.getElementById('chatbotInput').addEventListener('keypress', function(e)
     }
 });
 
-// Auto-refresh every 10 seconds
-setInterval(async () => {
-    if (connectionStatus === 'online') {
-        await loadAllPendingQuestions();
-        await autoLoadNextQuestion();
-    }
-}, 10000);
+document.getElementById('chatbotInput').addEventListener('focus', function() {
+    if (chatbotMinimized) toggleChatbot();
+});
 
-// Initialize when page loads
-document.addEventListener('DOMContentLoaded', initializeAdminPanel);
-
-// ==================== TOGGLE CHATBOT ====================
-
-let chatbotMinimized = false;
-
-function toggleChatbot() {
-    const chatbot = document.getElementById('adminChatbot');
-    const toggle = document.getElementById('chatbotToggle');
-    const body = document.getElementById('chatbotBody');
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🤖 Chatbot initialized with admin reply polling');
+    loadPendingQuestions();
     
-    chatbotMinimized = !chatbotMinimized;
+    // Poll every 10 seconds for admin replies
+    setInterval(pollForAdminReplies, 10000);
     
-    if (chatbotMinimized) {
-        chatbot.classList.add('chatbot-minimized');
-        toggle.textContent = '+';
-        body.style.display = 'none';
-    } else {
-        chatbot.classList.remove('chatbot-minimized');
-        toggle.textContent = '−';
-        body.style.display = 'flex';
-    }
-}
+    // Initial poll after 5 seconds
+    setTimeout(pollForAdminReplies, 5000);
+});
 </script>
